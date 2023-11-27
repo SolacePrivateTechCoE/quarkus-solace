@@ -1,6 +1,7 @@
-package io.quarkiverse.solace;
+package io.quarkiverse.solace.outgoing;
 
 import java.util.concurrent.Flow;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.microprofile.reactive.messaging.Message;
 
@@ -14,7 +15,9 @@ import com.solace.messaging.publisher.PersistentMessagePublisher.PublishReceipt;
 import com.solace.messaging.resources.Topic;
 
 import io.netty.handler.codec.http.HttpHeaderValues;
+import io.quarkiverse.solace.SolaceConnectorOutgoingConfiguration;
 import io.quarkiverse.solace.i18n.SolaceLogging;
+import io.quarkiverse.solace.util.SenderProcessor;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.subscription.UniEmitter;
 import io.smallrye.reactive.messaging.OutgoingMessageMetadata;
@@ -64,6 +67,7 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
     }
 
     private Uni<Void> sendMessage(MessagingService solace, Message<?> m, boolean waitForPublishReceipt) {
+
         return publishMessage(publisher, m, solace.messageBuilder(), waitForPublishReceipt)
                 .onItem().transformToUni(receipt -> {
                     if (receipt != null) {
@@ -76,11 +80,15 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
 
     private Uni<PublishReceipt> publishMessage(PersistentMessagePublisher publisher, Message<?> m,
             OutboundMessageBuilder msgBuilder, boolean waitForPublishReceipt) {
-        Topic topic = this.topic;
+        AtomicReference<Topic> topic = new AtomicReference<>(this.topic);
         OutboundMessage outboundMessage;
         m.getMetadata(SolaceOutboundMetadata.class).ifPresent(metadata -> {
-            metadata.getHttpContentHeaders().forEach(msgBuilder::withHTTPContentHeader);
-            metadata.getProperties().forEach(msgBuilder::withProperty);
+            if (metadata.getHttpContentHeaders() != null && !metadata.getHttpContentHeaders().isEmpty()) {
+                metadata.getHttpContentHeaders().forEach(msgBuilder::withHTTPContentHeader);
+            }
+            if (metadata.getProperties() != null && !metadata.getProperties().isEmpty()) {
+                metadata.getProperties().forEach(msgBuilder::withProperty);
+            }
             if (metadata.getExpiration() != null) {
                 msgBuilder.withExpiration(metadata.getExpiration());
             }
@@ -102,6 +110,10 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
             if (metadata.getClassOfService() != null) {
                 msgBuilder.withClassOfService(metadata.getClassOfService());
             }
+
+            if (metadata.getDynamicDestination() != null) {
+                topic.set(Topic.of(metadata.getDynamicDestination()));
+            }
         });
         Object payload = m.getPayload();
         if (payload instanceof OutboundMessage) {
@@ -120,22 +132,22 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
         return Uni.createFrom().<PublishReceipt> emitter(e -> {
             try {
                 if (waitForPublishReceipt) {
-                    publisher.publish(outboundMessage, topic, e);
+                    publisher.publish(outboundMessage, topic.get(), e);
                 } else {
-                    publisher.publish(outboundMessage, topic);
+                    publisher.publish(outboundMessage, topic.get());
                     e.complete(null);
                 }
             } catch (Throwable t) {
                 e.fail(t);
             }
-        }).invoke(() -> SolaceLogging.log.successfullyToTopic(channel, topic.getName()));
+        }).invoke(() -> SolaceLogging.log.successfullyToTopic(channel, topic.get().getName()));
     }
 
     public Flow.Subscriber<? extends Message<?>> getSubscriber() {
         return this.subscriber;
     }
 
-    void close() {
+    public void close() {
         if (processor != null) {
             processor.cancel();
         }

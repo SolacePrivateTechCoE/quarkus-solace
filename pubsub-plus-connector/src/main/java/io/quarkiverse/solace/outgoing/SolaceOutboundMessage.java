@@ -1,4 +1,4 @@
-package io.quarkiverse.solace;
+package io.quarkiverse.solace.outgoing;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -45,6 +45,11 @@ public class SolaceOutboundMessage<T> implements Message<T> {
         } else {
             return ack.get();
         }
+    }
+
+    @Override
+    public CompletionStage<Void> nack(Throwable reason, Metadata metadata) {
+        return Message.super.nack(reason, metadata);
     }
 
     @Override

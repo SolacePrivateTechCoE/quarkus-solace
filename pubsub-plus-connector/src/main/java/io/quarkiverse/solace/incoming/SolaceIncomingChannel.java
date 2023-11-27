@@ -1,5 +1,6 @@
-package io.quarkiverse.solace;
+package io.quarkiverse.solace.incoming;
 
+import java.time.Duration;
 import java.time.ZonedDateTime;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
@@ -7,6 +8,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import io.quarkiverse.solace.i18n.SolaceLogging;
 import org.eclipse.microprofile.reactive.messaging.Message;
 
 import com.solace.messaging.MessagingService;
@@ -20,6 +22,10 @@ import com.solace.messaging.receiver.PersistentMessageReceiver;
 import com.solace.messaging.resources.Queue;
 import com.solace.messaging.resources.TopicSubscription;
 
+import io.quarkiverse.solace.SolaceConnectorIncomingConfiguration;
+import io.quarkiverse.solace.util.SolaceAckHandler;
+import io.quarkiverse.solace.util.SolaceErrorTopicPublisherHandler;
+import io.quarkiverse.solace.util.SolaceFailureHandler;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.health.HealthReport;
@@ -37,6 +43,7 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
     private final PersistentMessageReceiver receiver;
     private final Flow.Publisher<? extends Message<?>> stream;
     private final ExecutorService pollerThread;
+    private SolaceErrorTopicPublisherHandler solaceErrorTopicPublisherHandler;
 
     public SolaceIncomingChannel(Vertx vertx, SolaceConnectorIncomingConfiguration ic, MessagingService solace) {
         this.channel = ic.getChannel();
@@ -60,10 +67,12 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
                     break;
             }
         });
-        String subscriptions = ic.getSubscriptions().orElse(this.channel);
-        builder.withSubscriptions(Arrays.stream(subscriptions.split(","))
-                .map(TopicSubscription::of)
-                .toArray(TopicSubscription[]::new));
+        if (ic.getPersistentAddSubscriptions().booleanValue()) {
+            String subscriptions = ic.getSubscriptions().orElse(this.channel);
+            builder.withSubscriptions(Arrays.stream(subscriptions.split(","))
+                    .map(TopicSubscription::of)
+                    .toArray(TopicSubscription[]::new));
+        }
         switch (ic.getPersistentMissingResourceCreationStrategy()) {
             case "create-on-start":
                 builder.withMissingResourcesCreationStrategy(MissingResourcesCreationStrategy.CREATE_ON_START);
@@ -76,17 +85,41 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
         this.receiver = builder.build(getQueue(ic));
         boolean lazyStart = ic.getClientLazyStart();
         this.ackHandler = new SolaceAckHandler(receiver);
-        this.failureHandler = new SolaceFailureHandler(channel, receiver);
+        this.failureHandler = new SolaceFailureHandler(channel, receiver, solace);
+        ic.getPersistentErrorTopic().ifPresent(et -> {
+            this.solaceErrorTopicPublisherHandler = new SolaceErrorTopicPublisherHandler(solace, et);
+        });
+
         // TODO Here use a subscription receiver.receiveAsync with an internal queue
         this.pollerThread = Executors.newSingleThreadExecutor();
+        Integer realTimeout;
+        final Long expiry = ic.getPersistentQueuePolledWaitTimeInMillis() != null ? ic.getPersistentQueuePolledWaitTimeInMillis() + System.currentTimeMillis() : null;
+        if (expiry != null) {
+            try {
+                realTimeout = Math.toIntExact(expiry - System.currentTimeMillis());
+                if (realTimeout < 0) {
+                    realTimeout = 0;
+                }
+            } catch (ArithmeticException e) {
+//                SolaceLogging.log.debug("Failed to compute real timeout", e);
+                // Always true: expiry - System.currentTimeMillis() < timeoutInMillis
+                // So just set it to 0 (no-wait) if we underflow
+                realTimeout = 0;
+            }
+        } else {
+            realTimeout = null;
+        }
+        Integer finalRealTimeout = realTimeout;
         this.stream = Multi.createBy().repeating()
-                .uni(() -> Uni.createFrom().item(receiver::receiveMessage)
+                .uni(() -> Uni.createFrom().item(finalRealTimeout == null ?  receiver.receiveMessage() : (finalRealTimeout == 0 ? receiver.receiveMessage(0) : receiver.receiveMessage(finalRealTimeout)))
                         .runSubscriptionOn(pollerThread))
                 .until(__ -> closed.get())
                 .emitOn(context::runOnContext)
-                .map(consumed -> new SolaceInboundMessage<>(consumed, ackHandler, failureHandler))
+                .map(consumed -> new SolaceInboundMessage<>(consumed, ackHandler, failureHandler,
+                        solaceErrorTopicPublisherHandler, ic))
                 .plug(m -> lazyStart ? m.onSubscription().call(() -> Uni.createFrom().completionStage(receiver.startAsync()))
-                        : m);
+                        : m)
+                .onFailure().retry().withBackOff(Duration.ofSeconds(1), Duration.ofSeconds(10)).atMost(3);
         if (!lazyStart) {
             receiver.start();
         }

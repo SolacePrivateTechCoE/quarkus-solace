@@ -1,4 +1,4 @@
-package io.quarkiverse.solace;
+package io.quarkiverse.solace.incoming;
 
 import java.io.Serializable;
 import java.util.Map;

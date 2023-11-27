@@ -1,4 +1,4 @@
-package io.quarkiverse.solace;
+package io.quarkiverse.solace.util;
 
 import static io.quarkiverse.solace.i18n.SolaceExceptions.ex;
 

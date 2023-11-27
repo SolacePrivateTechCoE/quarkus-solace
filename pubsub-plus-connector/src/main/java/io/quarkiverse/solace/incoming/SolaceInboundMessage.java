@@ -1,4 +1,4 @@
-package io.quarkiverse.solace;
+package io.quarkiverse.solace.incoming;
 
 import static io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage.captureContextMetadata;
 
@@ -9,7 +9,11 @@ import org.eclipse.microprofile.reactive.messaging.Metadata;
 import com.solace.messaging.receiver.InboundMessage;
 
 import io.netty.handler.codec.http.HttpHeaderValues;
+import io.quarkiverse.solace.SolaceConnectorIncomingConfiguration;
 import io.quarkiverse.solace.i18n.SolaceLogging;
+import io.quarkiverse.solace.util.SolaceAckHandler;
+import io.quarkiverse.solace.util.SolaceErrorTopicPublisherHandler;
+import io.quarkiverse.solace.util.SolaceFailureHandler;
 import io.smallrye.reactive.messaging.providers.MetadataInjectableMessage;
 import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 import io.vertx.core.buffer.Buffer;
@@ -19,15 +23,21 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
     private final InboundMessage msg;
     private final SolaceAckHandler ackHandler;
     private final SolaceFailureHandler nackHandler;
+    private final SolaceErrorTopicPublisherHandler solaceErrorTopicPublisherHandler;
+    private final SolaceConnectorIncomingConfiguration ic;
     private final T payload;
 
     private Metadata metadata;
 
-    public SolaceInboundMessage(InboundMessage message, SolaceAckHandler ackHandler, SolaceFailureHandler nackHandler) {
+    public SolaceInboundMessage(InboundMessage message, SolaceAckHandler ackHandler, SolaceFailureHandler nackHandler,
+            SolaceErrorTopicPublisherHandler solaceErrorTopicPublisherHandler,
+            SolaceConnectorIncomingConfiguration ic) {
         this.msg = message;
         this.payload = (T) convertPayload();
         this.ackHandler = ackHandler;
         this.nackHandler = nackHandler;
+        this.solaceErrorTopicPublisherHandler = solaceErrorTopicPublisherHandler;
+        this.ic = ic;
         this.metadata = captureContextMetadata(new SolaceInboundMetadata(message));
     }
 
@@ -81,7 +91,10 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
 
     @Override
     public CompletionStage<Void> nack(Throwable reason, Metadata nackMetadata) {
-        return nackHandler.handle(this, reason, nackMetadata);
+        if (solaceErrorTopicPublisherHandler != null) {
+            solaceErrorTopicPublisherHandler.handle(this, ic);
+        }
+        return nackHandler.handle(this, reason, nackMetadata, solaceErrorTopicPublisherHandler != null);
     }
 
     @Override

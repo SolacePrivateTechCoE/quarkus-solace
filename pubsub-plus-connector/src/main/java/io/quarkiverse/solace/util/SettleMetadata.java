@@ -1,4 +1,4 @@
-package io.quarkiverse.solace;
+package io.quarkiverse.solace.util;
 
 import com.solace.messaging.config.MessageAcknowledgementConfiguration;
 

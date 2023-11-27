@@ -22,6 +22,8 @@ import org.eclipse.microprofile.reactive.messaging.spi.Connector;
 
 import com.solace.messaging.MessagingService;
 
+import io.quarkiverse.solace.incoming.SolaceIncomingChannel;
+import io.quarkiverse.solace.outgoing.SolaceOutgoingChannel;
 import io.smallrye.reactive.messaging.annotations.ConnectorAttribute;
 import io.smallrye.reactive.messaging.connector.InboundConnector;
 import io.smallrye.reactive.messaging.connector.OutboundConnector;
@@ -32,17 +34,25 @@ import io.vertx.mutiny.core.Vertx;
 
 @ApplicationScoped
 @Connector(SolaceConnector.CONNECTOR_NAME)
+
 // TODO only persisted is implemented
 @ConnectorAttribute(name = "client.type", type = "string", direction = INCOMING_AND_OUTGOING, description = "Direct or persisted", defaultValue = "persisted")
 @ConnectorAttribute(name = "client.lazy.start", type = "boolean", direction = INCOMING_AND_OUTGOING, description = "Whether the receiver or publisher is started at initialization or lazily at subscription time", defaultValue = "false")
 @ConnectorAttribute(name = "subscriptions", type = "string", direction = INCOMING, description = "The comma separated list of subscriptions, the channel name if empty")
 @ConnectorAttribute(name = "persistent.queue.type", type = "string", direction = INCOMING, description = "The queue type of receiver", defaultValue = "durable-non-exclusive")
+@ConnectorAttribute(name = "persistent.add-subscriptions", type = "boolean", direction = INCOMING, description = "Whether to add configured subscriptions to queue. Will fail if permissions to configure subscriptions is not allowed on broker", defaultValue = "false")
 @ConnectorAttribute(name = "persistent.queue.name", type = "string", direction = INCOMING, description = "The queue name of receiver")
+@ConnectorAttribute(name = "persistent.queue.polled-wait-time-in-millis", type = "int", direction = INCOMING, description = "Maximum wait time for polled consumers to receive a message from configured queue", defaultValue = "100")
 @ConnectorAttribute(name = "persistent.missing-resource-creation-strategy", type = "string", direction = INCOMING, description = "Missing resource creation strategy", defaultValue = "create-on-start")
 @ConnectorAttribute(name = "persistent.selector-query", type = "string", direction = INCOMING, description = "The receiver selector query")
 @ConnectorAttribute(name = "persistent.replay.strategy", type = "string", direction = INCOMING, description = "The receiver replay strategy")
 @ConnectorAttribute(name = "persistent.replay.timebased-start-time", type = "string", direction = INCOMING, description = "The receiver replay timebased start time")
 @ConnectorAttribute(name = "persistent.replay.replication-group-message-id", type = "string", direction = INCOMING, description = "The receiver replay replication group message id")
+@ConnectorAttribute(name = "persistent.error.topic", type = "string", direction = INCOMING, description = "The error topic where message should be published in case of error")
+@ConnectorAttribute(name = "persistent.error.message.dmq-eligible", type = "boolean", direction = INCOMING, description = "Whether error message is eligible to move to dead message queue", defaultValue = "false")
+@ConnectorAttribute(name = "persistent.error.message.ttl", type = "long", direction = INCOMING, description = "Error message TTL before moving to dead message queue")
+@ConnectorAttribute(name = "persistent.error.message.wait-for-publish-receipt", type = "boolean", direction = INCOMING, description = "Whether the client waits to receive the publish receipt from Solace broker before acknowledging the error message")
+@ConnectorAttribute(name = "persistent.concurrency", type = "int", direction = INCOMING, description = "The number of concurrent consumers", defaultValue = "1")
 @ConnectorAttribute(name = "topic", type = "string", direction = OUTGOING, description = "The topic to publish messages, by default the channel name")
 @ConnectorAttribute(name = "max-inflight-messages", type = "long", direction = OUTGOING, description = "The maximum number of messages to be written to Solace broker. It limits the number of messages waiting to be written and acknowledged by the broker. You can set this attribute to `0` remove the limit", defaultValue = "1024")
 @ConnectorAttribute(name = "waitForPublishReceipt", type = "boolean", direction = OUTGOING, description = "Whether the client waits to receive the publish receipt from Solace broker before acknowledging the message", defaultValue = "true")

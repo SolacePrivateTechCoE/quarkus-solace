@@ -8,7 +8,7 @@ import org.eclipse.microprofile.reactive.messaging.Message;
 
 import com.solace.messaging.receiver.InboundMessage;
 
-import io.quarkiverse.solace.SolaceInboundMetadata;
+import io.quarkiverse.solace.incoming.SolaceInboundMetadata;
 import io.smallrye.reactive.messaging.MessageConverter;
 import io.smallrye.reactive.messaging.providers.helpers.TypeUtils;
 

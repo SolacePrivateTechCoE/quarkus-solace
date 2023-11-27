@@ -12,7 +12,7 @@ public class HelloConsumer {
 
     @Incoming("hello-in")
     void consume(JsonObject p) {
-        Log.infof("Received message: %s - %d", p.getString("name"), p.getInteger("age"));
+        Log.infof("Received message: %s", p.toString());
     }
 
 }

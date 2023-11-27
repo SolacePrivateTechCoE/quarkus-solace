@@ -1,4 +1,4 @@
-package io.quarkiverse.solace;
+package io.quarkiverse.solace.outgoing;
 
 import java.util.Map;
 
@@ -13,6 +13,7 @@ public class SolaceOutboundMetadata {
     private final Long timeToLive;
     private final String applicationMessageId;
     private final Integer classOfService;
+    private final String dynamicDestination;
 
     public static PubSubOutboundMetadataBuilder builder() {
         return new PubSubOutboundMetadataBuilder();
@@ -26,7 +27,7 @@ public class SolaceOutboundMetadata {
             String applicationMessageType,
             Long timeToLive,
             String applicationMessageId,
-            Integer classOfService) {
+            Integer classOfService, String dynamicDestination) {
         this.httpContentHeaders = httpContentHeaders;
         this.expiration = expiration;
         this.priority = priority;
@@ -36,6 +37,7 @@ public class SolaceOutboundMetadata {
         this.timeToLive = timeToLive;
         this.applicationMessageId = applicationMessageId;
         this.classOfService = classOfService;
+        this.dynamicDestination = dynamicDestination;
     }
 
     public Map<String, String> getHttpContentHeaders() {
@@ -74,6 +76,10 @@ public class SolaceOutboundMetadata {
         return classOfService;
     }
 
+    public String getDynamicDestination() {
+        return dynamicDestination;
+    }
+
     public static class PubSubOutboundMetadataBuilder {
         private Map<String, String> httpContentHeaders;
         private Long expiration;
@@ -84,6 +90,7 @@ public class SolaceOutboundMetadata {
         private Long timeToLive;
         private String applicationMessageId;
         private Integer classOfService;
+        private String dynamicDestination;
 
         public PubSubOutboundMetadataBuilder setHttpContentHeaders(Map<String, String> httpContentHeader) {
             this.httpContentHeaders = httpContentHeaders;
@@ -130,9 +137,14 @@ public class SolaceOutboundMetadata {
             return this;
         }
 
+        public PubSubOutboundMetadataBuilder setDynamicDestination(String dynamicDestination) {
+            this.dynamicDestination = dynamicDestination;
+            return this;
+        }
+
         public SolaceOutboundMetadata createPubSubOutboundMetadata() {
             return new SolaceOutboundMetadata(httpContentHeaders, expiration, priority, senderId, properties,
-                    applicationMessageType, timeToLive, applicationMessageId, classOfService);
+                    applicationMessageType, timeToLive, applicationMessageId, classOfService, dynamicDestination);
         }
     }
 }

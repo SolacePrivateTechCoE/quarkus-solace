@@ -1,9 +1,10 @@
-package io.quarkiverse.solace;
+package io.quarkiverse.solace.util;
 
 import java.util.concurrent.CompletionStage;
 
 import com.solace.messaging.receiver.AcknowledgementSupport;
 
+import io.quarkiverse.solace.incoming.SolaceInboundMessage;
 import io.smallrye.mutiny.Uni;
 
 public class SolaceAckHandler {
