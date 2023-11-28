@@ -3,10 +3,12 @@ package io.quarkiverse.solace.incoming;
 import static io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage.captureContextMetadata;
 
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.TimeUnit;
 
 import org.eclipse.microprofile.reactive.messaging.Metadata;
 
 import com.solace.messaging.config.MessageAcknowledgementConfiguration;
+import com.solace.messaging.publisher.PersistentMessagePublisher;
 import com.solace.messaging.receiver.InboundMessage;
 
 import io.netty.handler.codec.http.HttpHeaderValues;
@@ -94,16 +96,19 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
     @Override
     public CompletionStage<Void> nack(Throwable reason, Metadata nackMetadata) {
         if (solaceErrorTopicPublisherHandler != null) {
-            solaceErrorTopicPublisherHandler.handle(this, ic).handle((publishReceipt, throwable) -> {
-                if (throwable != null) {
-                    SolaceLogging.log.unsuccessfulToTopic(ic.getConsumerQueueErrorTopic().orElse(""), ic.getChannel());
-                    if (ic.getConsumerQueueEnableNacks()) {
-                        return nackHandler.handle(this, throwable, nackMetadata,
-                                MessageAcknowledgementConfiguration.Outcome.FAILED);
-                    }
+            try {
+                PersistentMessagePublisher.PublishReceipt publishReceipt = solaceErrorTopicPublisherHandler.handle(this, ic)
+                        .orTimeout(30, TimeUnit.SECONDS).get(); // TODO :: Decide on timeout or make it configurable
+                if (publishReceipt != null) {
+                    return nackHandler.handle(this, reason, nackMetadata, MessageAcknowledgementConfiguration.Outcome.ACCEPTED);
                 }
-                return nackHandler.handle(this, throwable, nackMetadata, MessageAcknowledgementConfiguration.Outcome.ACCEPTED);
-            });
+            } catch (Throwable e) {
+                SolaceLogging.log.unsuccessfulToTopic(ic.getConsumerQueueErrorTopic().orElse(""), ic.getChannel());
+                if (ic.getConsumerQueueEnableNacks()) {
+                    return nackHandler.handle(this, reason, nackMetadata,
+                            MessageAcknowledgementConfiguration.Outcome.FAILED);
+                }
+            }
         }
 
         MessageAcknowledgementConfiguration.Outcome outcome = ic.getConsumerQueueEnableNacks()
