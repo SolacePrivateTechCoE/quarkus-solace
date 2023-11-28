@@ -22,10 +22,18 @@ public interface SolaceLogging extends BasicLogger {
     void typeConversionFallback();
 
     @LogMessage(level = Logger.Level.DEBUG)
-    @Message(id = 55201, value = "Message from channel %s sent successfully to Kafka topic '%s'")
+    @Message(id = 55201, value = "Message from channel %s sent successfully to Solace topic '%s'")
     void successfullyToTopic(String channel, String topic);
 
     @LogMessage(level = Logger.Level.ERROR)
-    @Message(id = 55202, value = "A message sent to channel `%s` has been nacked, outcome: %s")
-    void messageNacked(String channel, String outcome);
+    @Message(id = 55202, value = "A message sent to channel `%s` has been settled, outcome: %s")
+    void messageSettled(String channel, String outcome);
+
+    @LogMessage(level = Logger.Level.ERROR)
+    @Message(id = 55203, value = "A error message to topic %s received from channel `%s` is unsuccessful")
+    void unsuccessfulToTopic(String topic, String channel);
+
+    @LogMessage(level = Logger.Level.ERROR)
+    @Message(id = 55204, value = "A exception occurred when publishing to topic %s")
+    void publishException(String topic);
 }

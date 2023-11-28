@@ -16,11 +16,11 @@ public class OutboundErrorMessageMapper {
         Properties extendedMessageProperties = new Properties();
 
         extendedMessageProperties.setProperty(SolaceProperties.MessageProperties.PERSISTENT_DMQ_ELIGIBLE,
-                Boolean.toString(incomingConfiguration.getPersistentErrorMessageDmqEligible().booleanValue()));
+                Boolean.toString(incomingConfiguration.getConsumerQueueErrorMessageDmqEligible().booleanValue()));
         messageBuilder.fromProperties(extendedMessageProperties);
 
-        incomingConfiguration.getPersistentErrorMessageTtl().ifPresent(ttl -> {
-            messageBuilder.withTimeToLive(incomingConfiguration.getPersistentErrorMessageTtl().get());
+        incomingConfiguration.getConsumerQueueErrorMessageTtl().ifPresent(ttl -> {
+            messageBuilder.withTimeToLive(incomingConfiguration.getConsumerQueueErrorMessageTtl().get());
         });
 
         return messageBuilder.build(inputMessage.getPayloadAsBytes());

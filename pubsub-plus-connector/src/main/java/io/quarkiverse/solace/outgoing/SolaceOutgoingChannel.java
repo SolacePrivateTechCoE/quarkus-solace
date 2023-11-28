@@ -12,6 +12,7 @@ import com.solace.messaging.publisher.OutboundMessage;
 import com.solace.messaging.publisher.OutboundMessageBuilder;
 import com.solace.messaging.publisher.PersistentMessagePublisher;
 import com.solace.messaging.publisher.PersistentMessagePublisher.PublishReceipt;
+import com.solace.messaging.publisher.PublisherHealthCheck;
 import com.solace.messaging.resources.Topic;
 
 import io.netty.handler.codec.http.HttpHeaderValues;
@@ -26,13 +27,15 @@ import io.smallrye.reactive.messaging.providers.helpers.MultiUtils;
 import io.vertx.core.json.Json;
 import io.vertx.mutiny.core.Vertx;
 
-public class SolaceOutgoingChannel implements PersistentMessagePublisher.MessagePublishReceiptListener {
+public class SolaceOutgoingChannel
+        implements PersistentMessagePublisher.MessagePublishReceiptListener, PublisherHealthCheck.PublisherReadinessListener {
 
     private final PersistentMessagePublisher publisher;
     private final String channel;
     private final Flow.Subscriber<? extends Message<?>> subscriber;
     private final Topic topic;
     private final SenderProcessor processor;
+    private boolean isPublisherReady = true;
 
     public SolaceOutgoingChannel(Vertx vertx, SolaceConnectorOutgoingConfiguration oc, MessagingService solace) {
         this.channel = oc.getChannel();
@@ -130,6 +133,7 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
                     .build(Json.encode(payload));
         }
         return Uni.createFrom().<PublishReceipt> emitter(e -> {
+            boolean exitExceptionally = false;
             try {
                 if (waitForPublishReceipt) {
                     publisher.publish(outboundMessage, topic.get(), e);
@@ -137,8 +141,15 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
                     publisher.publish(outboundMessage, topic.get());
                     e.complete(null);
                 }
+            } catch (PubSubPlusClientException.PublisherOverflowException publisherOverflowException) {
+                isPublisherReady = false;
+                exitExceptionally = true;
             } catch (Throwable t) {
                 e.fail(t);
+            } finally {
+                if (exitExceptionally) {
+                    publisher.notifyWhenReady();
+                }
             }
         }).invoke(() -> SolaceLogging.log.successfullyToTopic(channel, topic.get().getName()));
     }
@@ -175,5 +186,10 @@ public class SolaceOutgoingChannel implements PersistentMessagePublisher.Message
 
     public void isAlive(HealthReport.HealthReportBuilder builder) {
 
+    }
+
+    @Override
+    public void ready() {
+        isPublisherReady = true;
     }
 }

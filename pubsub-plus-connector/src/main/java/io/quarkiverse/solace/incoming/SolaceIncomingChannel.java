@@ -8,11 +8,11 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import io.quarkiverse.solace.i18n.SolaceLogging;
 import org.eclipse.microprofile.reactive.messaging.Message;
 
 import com.solace.messaging.MessagingService;
 import com.solace.messaging.PersistentMessageReceiverBuilder;
+import com.solace.messaging.config.MessageAcknowledgementConfiguration.Outcome;
 import com.solace.messaging.config.MissingResourcesCreationConfiguration.MissingResourcesCreationStrategy;
 import com.solace.messaging.config.ReceiverActivationPassivationConfiguration;
 import com.solace.messaging.config.ReplayStrategy;
@@ -49,12 +49,17 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
         this.channel = ic.getChannel();
         this.context = Context.newInstance(((VertxInternal) vertx.getDelegate()).createEventLoopContext());
         DirectMessageReceiver r = solace.createDirectMessageReceiverBuilder().build();
+        Outcome[] outcomes = new Outcome[] { Outcome.ACCEPTED };
+        if (ic.getConsumerQueueEnableNacks()) {
+            outcomes = new Outcome[] { Outcome.ACCEPTED, Outcome.FAILED, Outcome.REJECTED };
+        }
         PersistentMessageReceiverBuilder builder = solace.createPersistentMessageReceiverBuilder()
                 .withMessageClientAcknowledgement()
+                .withRequiredMessageClientOutcomeOperationSupport(outcomes)
                 .withActivationPassivationSupport(this);
 
-        ic.getPersistentSelectorQuery().ifPresent(builder::withMessageSelector);
-        ic.getPersistentReplayStrategy().ifPresent(s -> {
+        ic.getConsumerQueueSelectorQuery().ifPresent(builder::withMessageSelector);
+        ic.getConsumerQueueReplayStrategy().ifPresent(s -> {
             switch (s) {
                 case "all-messages":
                     builder.withMessageReplay(ReplayStrategy.allMessages());
@@ -67,13 +72,13 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
                     break;
             }
         });
-        if (ic.getPersistentAddSubscriptions().booleanValue()) {
-            String subscriptions = ic.getSubscriptions().orElse(this.channel);
+        if (ic.getConsumerQueueAddAdditionalSubscriptions()) {
+            String subscriptions = ic.getConsumerQueueSubscriptions().orElse(this.channel);
             builder.withSubscriptions(Arrays.stream(subscriptions.split(","))
                     .map(TopicSubscription::of)
                     .toArray(TopicSubscription[]::new));
         }
-        switch (ic.getPersistentMissingResourceCreationStrategy()) {
+        switch (ic.getConsumerQueueMissingResourceCreationStrategy()) {
             case "create-on-start":
                 builder.withMissingResourcesCreationStrategy(MissingResourcesCreationStrategy.CREATE_ON_START);
                 break;
@@ -86,14 +91,16 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
         boolean lazyStart = ic.getClientLazyStart();
         this.ackHandler = new SolaceAckHandler(receiver);
         this.failureHandler = new SolaceFailureHandler(channel, receiver, solace);
-        ic.getPersistentErrorTopic().ifPresent(et -> {
-            this.solaceErrorTopicPublisherHandler = new SolaceErrorTopicPublisherHandler(solace, et);
-        });
-
-        // TODO Here use a subscription receiver.receiveAsync with an internal queue
+        if (ic.getConsumerQueuePublishToErrorTopicOnFailure()) {
+            ic.getConsumerQueueErrorTopic().ifPresent(errorTopic -> {
+                this.solaceErrorTopicPublisherHandler = new SolaceErrorTopicPublisherHandler(solace, errorTopic);
+            });
+        }
         this.pollerThread = Executors.newSingleThreadExecutor();
         Integer realTimeout;
-        final Long expiry = ic.getPersistentQueuePolledWaitTimeInMillis() != null ? ic.getPersistentQueuePolledWaitTimeInMillis() + System.currentTimeMillis() : null;
+        final Long expiry = ic.getConsumerQueuePolledWaitTimeInMillis() != null
+                ? ic.getConsumerQueuePolledWaitTimeInMillis() + System.currentTimeMillis()
+                : null;
         if (expiry != null) {
             try {
                 realTimeout = Math.toIntExact(expiry - System.currentTimeMillis());
@@ -101,7 +108,7 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
                     realTimeout = 0;
                 }
             } catch (ArithmeticException e) {
-//                SolaceLogging.log.debug("Failed to compute real timeout", e);
+                //                SolaceLogging.log.debug("Failed to compute real timeout", e);
                 // Always true: expiry - System.currentTimeMillis() < timeoutInMillis
                 // So just set it to 0 (no-wait) if we underflow
                 realTimeout = 0;
@@ -110,8 +117,10 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
             realTimeout = null;
         }
         Integer finalRealTimeout = realTimeout;
+        // TODO Here use a subscription receiver.receiveAsync with an internal queue
         this.stream = Multi.createBy().repeating()
-                .uni(() -> Uni.createFrom().item(finalRealTimeout == null ?  receiver.receiveMessage() : (finalRealTimeout == 0 ? receiver.receiveMessage(0) : receiver.receiveMessage(finalRealTimeout)))
+                .uni(() -> Uni.createFrom().item(finalRealTimeout == null ? receiver.receiveMessage()
+                        : (finalRealTimeout == 0 ? receiver.receiveMessage(0) : receiver.receiveMessage(finalRealTimeout)))
                         .runSubscriptionOn(pollerThread))
                 .until(__ -> closed.get())
                 .emitOn(context::runOnContext)
@@ -119,34 +128,34 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
                         solaceErrorTopicPublisherHandler, ic))
                 .plug(m -> lazyStart ? m.onSubscription().call(() -> Uni.createFrom().completionStage(receiver.startAsync()))
                         : m)
-                .onFailure().retry().withBackOff(Duration.ofSeconds(1), Duration.ofSeconds(10)).atMost(3);
+                .onFailure().retry().withBackOff(Duration.ofSeconds(1)).atMost(3);
         if (!lazyStart) {
             receiver.start();
         }
     }
 
     private static Queue getQueue(SolaceConnectorIncomingConfiguration ic) {
-        String queueType = ic.getPersistentQueueType();
+        String queueType = ic.getConsumerQueueType();
         switch (queueType) {
             case "durable-non-exclusive":
-                return Queue.durableNonExclusiveQueue(ic.getPersistentQueueName().orElse(ic.getChannel()));
+                return Queue.durableNonExclusiveQueue(ic.getConsumerQueueName().orElse(ic.getChannel()));
             case "durable-exclusive":
-                return Queue.durableExclusiveQueue(ic.getPersistentQueueName().orElse(ic.getChannel()));
+                return Queue.durableExclusiveQueue(ic.getConsumerQueueName().orElse(ic.getChannel()));
             default:
             case "non-durable-exclusive":
-                return ic.getPersistentQueueName().map(Queue::nonDurableExclusiveQueue)
+                return ic.getConsumerQueueName().map(Queue::nonDurableExclusiveQueue)
                         .orElseGet(Queue::nonDurableExclusiveQueue);
 
         }
     }
 
     private static ReplayStrategy getGroupMessageIdReplayStrategy(SolaceConnectorIncomingConfiguration ic) {
-        String groupMessageId = ic.getPersistentReplayReplicationGroupMessageId().orElseThrow();
+        String groupMessageId = ic.getConsumerQueueReplayReplicationGroupMessageId().orElseThrow();
         return ReplayStrategy.replicationGroupMessageIdBased(InboundMessage.ReplicationGroupMessageId.of(groupMessageId));
     }
 
     private static ReplayStrategy getTimeBasedReplayStrategy(SolaceConnectorIncomingConfiguration ic) {
-        String zoneDateTime = ic.getPersistentReplayTimebasedStartTime().orElseThrow();
+        String zoneDateTime = ic.getConsumerQueueReplayTimebasedStartTime().orElseThrow();
         return ReplayStrategy.timeBased(ZonedDateTime.parse(zoneDateTime));
     }
 

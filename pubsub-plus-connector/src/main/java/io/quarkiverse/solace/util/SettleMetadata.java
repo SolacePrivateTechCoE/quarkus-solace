@@ -14,6 +14,10 @@ public class SettleMetadata {
         return new SettleMetadata(MessageAcknowledgementConfiguration.Outcome.REJECTED);
     }
 
+    public static SettleMetadata failed() {
+        return new SettleMetadata(MessageAcknowledgementConfiguration.Outcome.FAILED);
+    }
+
     public SettleMetadata(MessageAcknowledgementConfiguration.Outcome settleOutcome) {
         this.settleOutcome = settleOutcome;
     }

@@ -6,6 +6,7 @@ import java.util.concurrent.CompletionStage;
 
 import org.eclipse.microprofile.reactive.messaging.Metadata;
 
+import com.solace.messaging.config.MessageAcknowledgementConfiguration;
 import com.solace.messaging.receiver.InboundMessage;
 
 import io.netty.handler.codec.http.HttpHeaderValues;
@@ -14,6 +15,7 @@ import io.quarkiverse.solace.i18n.SolaceLogging;
 import io.quarkiverse.solace.util.SolaceAckHandler;
 import io.quarkiverse.solace.util.SolaceErrorTopicPublisherHandler;
 import io.quarkiverse.solace.util.SolaceFailureHandler;
+import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.providers.MetadataInjectableMessage;
 import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
 import io.vertx.core.buffer.Buffer;
@@ -92,9 +94,25 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
     @Override
     public CompletionStage<Void> nack(Throwable reason, Metadata nackMetadata) {
         if (solaceErrorTopicPublisherHandler != null) {
-            solaceErrorTopicPublisherHandler.handle(this, ic);
+            solaceErrorTopicPublisherHandler.handle(this, ic).handle((publishReceipt, throwable) -> {
+                if (throwable != null) {
+                    SolaceLogging.log.unsuccessfulToTopic(ic.getConsumerQueueErrorTopic().orElse(""), ic.getChannel());
+                    if (ic.getConsumerQueueEnableNacks()) {
+                        return nackHandler.handle(this, throwable, nackMetadata,
+                                MessageAcknowledgementConfiguration.Outcome.FAILED);
+                    }
+                }
+                return nackHandler.handle(this, throwable, nackMetadata, MessageAcknowledgementConfiguration.Outcome.ACCEPTED);
+            });
         }
-        return nackHandler.handle(this, reason, nackMetadata, solaceErrorTopicPublisherHandler != null);
+
+        MessageAcknowledgementConfiguration.Outcome outcome = ic.getConsumerQueueEnableNacks()
+                && ic.getConsumerQueueDiscardMessagesOnFailure() && solaceErrorTopicPublisherHandler == null
+                        ? MessageAcknowledgementConfiguration.Outcome.REJECTED
+                        : MessageAcknowledgementConfiguration.Outcome.FAILED;
+        return ic.getConsumerQueueEnableNacks()
+                ? nackHandler.handle(this, reason, nackMetadata, outcome)
+                : Uni.createFrom().voidItem().subscribeAsCompletionStage();
     }
 
     @Override

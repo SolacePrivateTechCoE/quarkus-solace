@@ -1,14 +1,17 @@
 package io.quarkiverse.solace.util;
 
-import java.util.concurrent.CompletionStage;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 
 import com.solace.messaging.MessagingService;
 import com.solace.messaging.PubSubPlusClientException;
 import com.solace.messaging.publisher.OutboundMessage;
 import com.solace.messaging.publisher.PersistentMessagePublisher;
+import com.solace.messaging.publisher.PersistentMessagePublisher.PublishReceipt;
 import com.solace.messaging.resources.Topic;
 
 import io.quarkiverse.solace.SolaceConnectorIncomingConfiguration;
+import io.quarkiverse.solace.i18n.SolaceLogging;
 import io.quarkiverse.solace.incoming.SolaceInboundMessage;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.subscription.UniEmitter;
@@ -29,15 +32,17 @@ public class SolaceErrorTopicPublisherHandler implements PersistentMessagePublis
         outboundErrorMessageMapper = new OutboundErrorMessageMapper();
     }
 
-    public CompletionStage<PersistentMessagePublisher.PublishReceipt> handle(SolaceInboundMessage<?> message,
+    public CompletableFuture<PublishReceipt> handle(SolaceInboundMessage<?> message,
             SolaceConnectorIncomingConfiguration ic) {
         OutboundMessage outboundMessage = outboundErrorMessageMapper.mapError(this.solace.messageBuilder(),
                 message.getMessage(),
                 ic);
-
-        return Uni.createFrom().<PersistentMessagePublisher.PublishReceipt> emitter(e -> {
+        if (ic.getConsumerQueueErrorMessageWaitForPublishReceipt().get()) {
+            publisher.setMessagePublishReceiptListener(this);
+        }
+        return Uni.createFrom().<PublishReceipt> emitter(e -> {
             try {
-                if (ic.getPersistentErrorMessageWaitForPublishReceipt().orElse(false)) {
+                if (ic.getConsumerQueueErrorMessageWaitForPublishReceipt().get()) {
                     publisher.publish(outboundMessage, Topic.of(errorTopic), e);
                 } else {
                     publisher.publish(outboundMessage, Topic.of(errorTopic));
@@ -46,7 +51,8 @@ public class SolaceErrorTopicPublisherHandler implements PersistentMessagePublis
             } catch (Throwable t) {
                 e.fail(t);
             }
-        }).subscribeAsCompletionStage();
+        }).onFailure().retry().withBackOff(Duration.ofSeconds(1)).atMost(ic.getConsumerQueueErrorMessageMaxDeliveryAttempts())
+                .subscribeAsCompletionStage();
     }
 
     @Override
@@ -55,6 +61,7 @@ public class SolaceErrorTopicPublisherHandler implements PersistentMessagePublis
                 .getUserContext();
         PubSubPlusClientException exception = publishReceipt.getException();
         if (exception != null) {
+            SolaceLogging.log.publishException(this.errorTopic);
             uniEmitter.fail(exception);
         } else {
             uniEmitter.complete(publishReceipt);

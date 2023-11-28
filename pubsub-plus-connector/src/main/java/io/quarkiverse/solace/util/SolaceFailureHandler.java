@@ -25,19 +25,20 @@ public class SolaceFailureHandler {
         this.solace = solace;
     }
 
-    public CompletionStage<Void> handle(SolaceInboundMessage<?> msg, Throwable reason, Metadata metadata, boolean ackMessage) {
+    public CompletionStage<Void> handle(SolaceInboundMessage<?> msg, Throwable reason, Metadata metadata,
+            MessageAcknowledgementConfiguration.Outcome messageOutCome) {
         MessageAcknowledgementConfiguration.Outcome outcome;
         if (metadata != null) {
             outcome = metadata.get(SettleMetadata.class)
                     .map(SettleMetadata::getOutcome)
-                    .orElseGet(() -> ackMessage ? MessageAcknowledgementConfiguration.Outcome.ACCEPTED
-                            : MessageAcknowledgementConfiguration.Outcome.REJECTED /* TODO get outcome from reason */);
+                    .orElseGet(() -> messageOutCome != null ? messageOutCome
+                            : MessageAcknowledgementConfiguration.Outcome.FAILED /* TODO get outcome from reason */);
         } else {
-            outcome = ackMessage ? MessageAcknowledgementConfiguration.Outcome.ACCEPTED
-                    : MessageAcknowledgementConfiguration.Outcome.REJECTED;
+            outcome = messageOutCome != null ? messageOutCome
+                    : MessageAcknowledgementConfiguration.Outcome.FAILED;
         }
 
-        SolaceLogging.log.messageNacked(channel, outcome.toString().toLowerCase());
+        SolaceLogging.log.messageSettled(channel, outcome.toString().toLowerCase());
         return Uni.createFrom().voidItem()
                 .invoke(() -> ackSupport.settle(msg.getMessage(), outcome))
                 .runSubscriptionOn(msg::runOnMessageContext)
