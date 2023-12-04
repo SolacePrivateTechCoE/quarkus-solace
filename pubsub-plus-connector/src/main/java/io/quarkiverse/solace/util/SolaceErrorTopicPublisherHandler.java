@@ -37,17 +37,17 @@ public class SolaceErrorTopicPublisherHandler implements PersistentMessagePublis
         OutboundMessage outboundMessage = outboundErrorMessageMapper.mapError(this.solace.messageBuilder(),
                 message.getMessage(),
                 ic);
-        if (ic.getConsumerQueueErrorMessageWaitForPublishReceipt().get()) {
-            publisher.setMessagePublishReceiptListener(this);
-        }
+        //        if (ic.getConsumerQueueErrorMessageWaitForPublishReceipt().get()) {
+        publisher.setMessagePublishReceiptListener(this);
+        //        }
         return Uni.createFrom().<PublishReceipt> emitter(e -> {
             try {
-//                if (ic.getConsumerQueueErrorMessageWaitForPublishReceipt().get()) {
-//                    publisher.publish(outboundMessage, Topic.of(errorTopic), e);
-//                } else {
-//                    publisher.publish(outboundMessage, Topic.of(errorTopic));
-//                    e.complete(null);
-//                }
+                //                if (ic.getConsumerQueueErrorMessageWaitForPublishReceipt().get()) {
+                //                    publisher.publish(outboundMessage, Topic.of(errorTopic), e);
+                //                } else {
+                //                    publisher.publish(outboundMessage, Topic.of(errorTopic));
+                //                    e.complete(null);
+                //                }
                 publisher.publish(outboundMessage, Topic.of(errorTopic), e);
             } catch (Throwable t) {
                 e.fail(t);

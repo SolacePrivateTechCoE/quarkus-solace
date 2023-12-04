@@ -17,7 +17,6 @@ public class SolaceBrokerExtension implements BeforeAllCallback, ParameterResolv
 
     public static final Logger LOGGER = Logger.getLogger(SolaceBrokerExtension.class.getName());
     private static final String SOLACE_READY_MESSAGE = ".*Primary Virtual Router is now active.*";
-
     private static final String SOLACE_IMAGE = "solace/solace-pubsub-standard:latest";
 
     protected SolaceContainer solace;

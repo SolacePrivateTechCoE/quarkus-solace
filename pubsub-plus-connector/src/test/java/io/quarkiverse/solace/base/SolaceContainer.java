@@ -18,6 +18,12 @@ import com.github.dockerjava.api.model.Ulimit;
 
 public class SolaceContainer extends GenericContainer<SolaceContainer> {
 
+    public static final String INTEGRATION_TEST_QUEUE_NAME = "integration-test-queue";
+    public static final String INTEGRATION_TEST_QUEUE_SUBSCRIPTION = "quarkus/integration/test";
+    public static final String INTEGRATION_TEST_DMQ_NAME = "integration-test-queue-dmq";
+    public static final String INTEGRATION_TEST_ERROR_QUEUE_NAME = "integration-test-error-queue";
+    public static final String INTEGRATION_TEST_ERROR_QUEUE_SUBSCRIPTION = "solace/quarkus/error";
+
     private static final DockerImageName DEFAULT_IMAGE_NAME = DockerImageName.parse("solace/solace-pubsub-standard");
 
     private static final String DEFAULT_VPN = "default";
@@ -85,6 +91,41 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
         StringBuilder scriptBuilder = new StringBuilder();
         updateConfigScript(scriptBuilder, "enable");
         updateConfigScript(scriptBuilder, "configure");
+
+        // create Error queue, DMQ and a queue. Assign DMQ to queue
+
+        // Error Queue
+        updateConfigScript(scriptBuilder, "message-spool message-vpn default");
+        updateConfigScript(scriptBuilder, "create queue " + INTEGRATION_TEST_ERROR_QUEUE_NAME);
+        updateConfigScript(scriptBuilder, "access-type exclusive");
+        updateConfigScript(scriptBuilder, "max-spool-usage 300");
+        updateConfigScript(scriptBuilder, "subscription topic " + INTEGRATION_TEST_ERROR_QUEUE_SUBSCRIPTION);
+        updateConfigScript(scriptBuilder, "permission all consume");
+        updateConfigScript(scriptBuilder, "no shutdown");
+        updateConfigScript(scriptBuilder, "exit");
+        updateConfigScript(scriptBuilder, "exit");
+
+        // DMQ
+        updateConfigScript(scriptBuilder, "message-spool message-vpn default");
+        updateConfigScript(scriptBuilder, "create queue " + INTEGRATION_TEST_DMQ_NAME);
+        updateConfigScript(scriptBuilder, "access-type exclusive");
+        updateConfigScript(scriptBuilder, "max-spool-usage 300");
+        updateConfigScript(scriptBuilder, "permission all consume");
+        updateConfigScript(scriptBuilder, "no shutdown");
+        updateConfigScript(scriptBuilder, "exit");
+        updateConfigScript(scriptBuilder, "exit");
+
+        // Queue with DMQ assigned
+        updateConfigScript(scriptBuilder, "message-spool message-vpn default");
+        updateConfigScript(scriptBuilder, "create queue " + INTEGRATION_TEST_QUEUE_NAME);
+        updateConfigScript(scriptBuilder, "access-type exclusive");
+        updateConfigScript(scriptBuilder, "subscription topic " + INTEGRATION_TEST_QUEUE_SUBSCRIPTION);
+        updateConfigScript(scriptBuilder, "max-spool-usage 300");
+        updateConfigScript(scriptBuilder, "permission all consume");
+        updateConfigScript(scriptBuilder, "dead-message-queue " + INTEGRATION_TEST_DMQ_NAME);
+        updateConfigScript(scriptBuilder, "no shutdown");
+        updateConfigScript(scriptBuilder, "exit");
+        updateConfigScript(scriptBuilder, "exit");
 
         updateConfigScript(scriptBuilder, "client-profile default");
         updateConfigScript(scriptBuilder, "allow-guaranteed-message-receive");

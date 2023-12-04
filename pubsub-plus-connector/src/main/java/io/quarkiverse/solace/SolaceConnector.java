@@ -56,7 +56,7 @@ import io.vertx.mutiny.core.Vertx;
 @ConnectorAttribute(name = "consumer.queue.error.topic", type = "string", direction = INCOMING, description = "The error topic where message should be published in case of error")
 @ConnectorAttribute(name = "consumer.queue.error.message.dmq-eligible", type = "boolean", direction = INCOMING, description = "Whether error message is eligible to move to dead message queue", defaultValue = "false")
 @ConnectorAttribute(name = "consumer.queue.error.message.ttl", type = "long", direction = INCOMING, description = "Error message TTL before moving to dead message queue")
-@ConnectorAttribute(name = "consumer.queue.error.message.wait-for-publish-receipt", type = "boolean", direction = INCOMING, description = "Whether the client waits to receive the publish receipt from Solace broker for the published error message")
+//@ConnectorAttribute(name = "consumer.queue.error.message.wait-for-publish-receipt", type = "boolean", direction = INCOMING, description = "Whether the client waits to receive the publish receipt from Solace broker for the published error message")
 @ConnectorAttribute(name = "consumer.queue.error.message.max-delivery-attempts", type = "int", direction = INCOMING, description = "Maximum number of attempts to send a failed message to the error topic. Each attempt will have a backoff interval of 1 second. When all delivery attempts have been exhausted, the failed message will be requeued on the queue for redelivery.", defaultValue = "3")
 
 @ConnectorAttribute(name = "topic", type = "string", direction = OUTGOING, description = "The topic to publish messages, by default the channel name")
