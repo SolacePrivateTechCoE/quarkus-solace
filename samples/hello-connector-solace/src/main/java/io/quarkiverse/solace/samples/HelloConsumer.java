@@ -1,11 +1,12 @@
 package io.quarkiverse.solace.samples;
 
+import java.nio.charset.StandardCharsets;
+
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 
 import io.quarkus.logging.Log;
-import io.vertx.core.json.JsonObject;
 
 @ApplicationScoped
 public class HelloConsumer {
@@ -16,8 +17,8 @@ public class HelloConsumer {
      * @param p
      */
     @Incoming("hello-in")
-    void consume(JsonObject p) {
-        Log.infof("Received message: %s", p.toString());
+    void consume(byte[] p) {
+        Log.infof("Received message: %s", new String(p, StandardCharsets.UTF_8));
     }
 
     /**
