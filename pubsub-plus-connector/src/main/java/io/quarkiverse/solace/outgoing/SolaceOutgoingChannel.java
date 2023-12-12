@@ -171,7 +171,7 @@ public class SolaceOutgoingChannel
         try {
             if (!publishedMessagesTracker.awaitEmpty(this.waitTimeout, TimeUnit.MILLISECONDS)) {
                 SolaceLogging.log.info(String.format("Timed out while waiting for the" +
-                        " remaining messages to be acknowledged."));
+                        " remaining messages to get publish acknowledgment."));
             }
         } catch (InterruptedException e) {
             SolaceLogging.log.info(String.format("Interrupted while waiting for messages to get acknowledged"));
