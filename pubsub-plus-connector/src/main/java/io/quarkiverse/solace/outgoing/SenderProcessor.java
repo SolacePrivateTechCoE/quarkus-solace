@@ -1,4 +1,4 @@
-package io.quarkiverse.solace.util;
+package io.quarkiverse.solace.outgoing;
 
 import static io.quarkiverse.solace.i18n.SolaceExceptions.ex;
 
@@ -13,7 +13,7 @@ import org.eclipse.microprofile.reactive.messaging.Message;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.Subscriptions;
 
-public class SenderProcessor implements Processor<Message<?>, Message<?>>, Subscription {
+class SenderProcessor implements Processor<Message<?>, Message<?>>, Subscription {
 
     private final long inflights;
     private final boolean waitForCompletion;

@@ -1,4 +1,4 @@
-package io.quarkiverse.solace.util;
+package io.quarkiverse.solace.incoming;
 
 import java.util.concurrent.CompletionStage;
 
@@ -9,10 +9,9 @@ import com.solace.messaging.config.MessageAcknowledgementConfiguration;
 import com.solace.messaging.receiver.AcknowledgementSupport;
 
 import io.quarkiverse.solace.i18n.SolaceLogging;
-import io.quarkiverse.solace.incoming.SolaceInboundMessage;
 import io.smallrye.mutiny.Uni;
 
-public class SolaceFailureHandler {
+class SolaceFailureHandler {
 
     private final String channel;
     private final AcknowledgementSupport ackSupport;
@@ -38,7 +37,7 @@ public class SolaceFailureHandler {
                     : MessageAcknowledgementConfiguration.Outcome.FAILED;
         }
 
-        SolaceLogging.log.messageSettled(channel, outcome.toString().toLowerCase());
+        SolaceLogging.log.messageSettled(channel, outcome.toString().toLowerCase(), reason.getMessage());
         return Uni.createFrom().voidItem()
                 .invoke(() -> ackSupport.settle(msg.getMessage(), outcome))
                 .runSubscriptionOn(msg::runOnMessageContext)

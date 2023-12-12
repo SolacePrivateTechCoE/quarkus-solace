@@ -14,9 +14,6 @@ import com.solace.messaging.receiver.InboundMessage;
 import io.netty.handler.codec.http.HttpHeaderValues;
 import io.quarkiverse.solace.SolaceConnectorIncomingConfiguration;
 import io.quarkiverse.solace.i18n.SolaceLogging;
-import io.quarkiverse.solace.util.SolaceAckHandler;
-import io.quarkiverse.solace.util.SolaceErrorTopicPublisherHandler;
-import io.quarkiverse.solace.util.SolaceFailureHandler;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.providers.MetadataInjectableMessage;
 import io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage;
@@ -30,13 +27,15 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
     private final SolaceErrorTopicPublisherHandler solaceErrorTopicPublisherHandler;
     private final SolaceConnectorIncomingConfiguration ic;
     private final T payload;
+    private final UnsignedCounterBarrier unacknowledgedMessageTracker;
 
     private Metadata metadata;
 
     public SolaceInboundMessage(InboundMessage message, SolaceAckHandler ackHandler, SolaceFailureHandler nackHandler,
             SolaceErrorTopicPublisherHandler solaceErrorTopicPublisherHandler,
-            SolaceConnectorIncomingConfiguration ic) {
+            SolaceConnectorIncomingConfiguration ic, UnsignedCounterBarrier unacknowledgedMessageTracker) {
         this.msg = message;
+        this.unacknowledgedMessageTracker = unacknowledgedMessageTracker;
         this.payload = (T) convertPayload();
         this.ackHandler = ackHandler;
         this.nackHandler = nackHandler;
@@ -80,6 +79,8 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
                 SolaceLogging.log.typeConversionFallback();
             }
         }
+
+        this.unacknowledgedMessageTracker.increment();
         return body.getBytes();
     }
 
@@ -90,6 +91,7 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
 
     @Override
     public CompletionStage<Void> ack() {
+        this.unacknowledgedMessageTracker.decrement();
         return ackHandler.handle(this);
     }
 
@@ -100,6 +102,7 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
                 PersistentMessagePublisher.PublishReceipt publishReceipt = solaceErrorTopicPublisherHandler.handle(this, ic)
                         .orTimeout(30, TimeUnit.SECONDS).get(); // TODO :: Decide on timeout or make it configurable
                 if (publishReceipt != null) {
+                    this.unacknowledgedMessageTracker.decrement();
                     return nackHandler.handle(this, reason, nackMetadata, MessageAcknowledgementConfiguration.Outcome.ACCEPTED);
                 }
             } catch (Throwable e) {
@@ -115,6 +118,9 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
                 && ic.getConsumerQueueDiscardMessagesOnFailure() && solaceErrorTopicPublisherHandler == null
                         ? MessageAcknowledgementConfiguration.Outcome.REJECTED
                         : MessageAcknowledgementConfiguration.Outcome.FAILED;
+        if (outcome == MessageAcknowledgementConfiguration.Outcome.REJECTED) {
+            this.unacknowledgedMessageTracker.decrement();
+        }
         return ic.getConsumerQueueEnableNacks()
                 ? nackHandler.handle(this, reason, nackMetadata, outcome)
                 : Uni.createFrom().voidItem().subscribeAsCompletionStage();

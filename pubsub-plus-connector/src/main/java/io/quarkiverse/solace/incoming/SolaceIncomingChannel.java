@@ -6,6 +6,7 @@ import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.eclipse.microprofile.reactive.messaging.Message;
@@ -23,9 +24,7 @@ import com.solace.messaging.resources.Queue;
 import com.solace.messaging.resources.TopicSubscription;
 
 import io.quarkiverse.solace.SolaceConnectorIncomingConfiguration;
-import io.quarkiverse.solace.util.SolaceAckHandler;
-import io.quarkiverse.solace.util.SolaceErrorTopicPublisherHandler;
-import io.quarkiverse.solace.util.SolaceFailureHandler;
+import io.quarkiverse.solace.i18n.SolaceLogging;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.reactive.messaging.health.HealthReport;
@@ -44,10 +43,15 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
     private final Flow.Publisher<? extends Message<?>> stream;
     private final ExecutorService pollerThread;
     private SolaceErrorTopicPublisherHandler solaceErrorTopicPublisherHandler;
+    private long waitTimeout = -1;
+
+    // Assuming we won't ever exceed the limit of an unsigned long...
+    private final UnsignedCounterBarrier unacknowledgedMessageTracker = new UnsignedCounterBarrier();
 
     public SolaceIncomingChannel(Vertx vertx, SolaceConnectorIncomingConfiguration ic, MessagingService solace) {
         this.channel = ic.getChannel();
         this.context = Context.newInstance(((VertxInternal) vertx.getDelegate()).createEventLoopContext());
+        this.waitTimeout = ic.getClientShutdownWaitTimeout();
         DirectMessageReceiver r = solace.createDirectMessageReceiverBuilder().build();
         Outcome[] outcomes = new Outcome[] { Outcome.ACCEPTED };
         if (ic.getConsumerQueueEnableNacks()) {
@@ -96,7 +100,7 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
                 this.solaceErrorTopicPublisherHandler = new SolaceErrorTopicPublisherHandler(solace, errorTopic);
             });
         }
-        this.pollerThread = Executors.newSingleThreadExecutor();
+
         Integer realTimeout;
         final Long expiry = ic.getConsumerQueuePolledWaitTimeInMillis() != null
                 ? ic.getConsumerQueuePolledWaitTimeInMillis() + System.currentTimeMillis()
@@ -118,6 +122,7 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
         }
         Integer finalRealTimeout = realTimeout;
         // TODO Here use a subscription receiver.receiveAsync with an internal queue
+        this.pollerThread = Executors.newSingleThreadExecutor();
         this.stream = Multi.createBy().repeating()
                 .uni(() -> Uni.createFrom().item(finalRealTimeout == null ? receiver.receiveMessage()
                         : (finalRealTimeout == 0 ? receiver.receiveMessage(0) : receiver.receiveMessage(finalRealTimeout)))
@@ -125,7 +130,7 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
                 .until(__ -> closed.get())
                 .emitOn(context::runOnContext)
                 .map(consumed -> new SolaceInboundMessage<>(consumed, ackHandler, failureHandler,
-                        solaceErrorTopicPublisherHandler, ic))
+                        solaceErrorTopicPublisherHandler, ic, unacknowledgedMessageTracker))
                 .plug(m -> lazyStart ? m.onSubscription().call(() -> Uni.createFrom().completionStage(receiver.startAsync()))
                         : m)
                 .onFailure().retry().withBackOff(Duration.ofSeconds(1)).atMost(3);
@@ -163,8 +168,30 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
         return this.stream;
     }
 
+    public void waitForUnAcknowledgedMessages() {
+        try {
+            receiver.pause();
+            if (!unacknowledgedMessageTracker.awaitEmpty(this.waitTimeout, TimeUnit.MILLISECONDS)) {
+                SolaceLogging.log.info(String.format("Timed out while waiting for the" +
+                        " remaining messages to be acknowledged."));
+            }
+        } catch (InterruptedException e) {
+            SolaceLogging.log.info(String.format("Interrupted while waiting for messages to get acknowledged"));
+            throw new RuntimeException(e);
+        }
+    }
+
     public void close() {
         closed.compareAndSet(false, true);
+        if (this.pollerThread != null) {
+            this.pollerThread.shutdown();
+            try {
+                this.pollerThread.awaitTermination(3000, TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                SolaceLogging.log.shutdownException(e.getMessage());
+                throw new RuntimeException(e);
+            }
+        }
         receiver.terminate(3000);
     }
 

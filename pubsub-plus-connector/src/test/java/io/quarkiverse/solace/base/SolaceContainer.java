@@ -42,6 +42,10 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
 
     private String password = "password";
 
+    private String integrationTestUser = "integrationtest";
+
+    private String integrationTestPassword = "integrationtest";
+
     private String vpn = DEFAULT_VPN;
 
     private final List<Pair<String, Service>> topicsConfiguration = new ArrayList<>();
@@ -125,6 +129,23 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
         updateConfigScript(scriptBuilder, "dead-message-queue " + INTEGRATION_TEST_DMQ_NAME);
         updateConfigScript(scriptBuilder, "no shutdown");
         updateConfigScript(scriptBuilder, "exit");
+        updateConfigScript(scriptBuilder, "exit");
+
+        // Integration test user acl
+        updateConfigScript(scriptBuilder,
+                "create acl-profile integration-test-user-acl message-vpn " + vpn + " allow-client-connect");
+        updateConfigScript(scriptBuilder, "exit");
+
+        updateConfigScript(scriptBuilder, "acl-profile integration-test-user-acl message-vpn " + vpn);
+        updateConfigScript(scriptBuilder, "publish-topic exceptions smf list quarkus/integration/test");
+        updateConfigScript(scriptBuilder, "exit");
+
+        // Integration test user
+        updateConfigScript(scriptBuilder, "create client-username " + integrationTestUser + " message-vpn " + vpn);
+        updateConfigScript(scriptBuilder, "password " + integrationTestPassword);
+        updateConfigScript(scriptBuilder, "acl-profile integration-test-user-acl");
+        updateConfigScript(scriptBuilder, "client-profile default");
+        updateConfigScript(scriptBuilder, "no shutdown");
         updateConfigScript(scriptBuilder, "exit");
 
         updateConfigScript(scriptBuilder, "client-profile default");
@@ -336,6 +357,14 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
      */
     public String getPassword() {
         return this.password;
+    }
+
+    public String getIntegrationTestUser() {
+        return integrationTestUser;
+    }
+
+    public String getIntegrationTestPassword() {
+        return integrationTestPassword;
     }
 
     public enum Service {

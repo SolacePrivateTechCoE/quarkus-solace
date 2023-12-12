@@ -69,9 +69,9 @@ public class SolaceInboundMetadata {
         return msg.getPayloadAsString();
     }
 
-    public Object getCorrelationKey() {
-        return msg.getCorrelationKey();
-    }
+    //    public Object getCorrelationKey() {
+    //        return msg.getCorrelationKey();
+    //    }
 
     public long getSequenceNumber() {
         return msg.getSequenceNumber();

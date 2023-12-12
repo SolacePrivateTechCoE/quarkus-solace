@@ -34,7 +34,7 @@ public class SolaceProcessorTest extends WeldTestBase {
                 .with("mp.messaging.incoming.in.consumer.queue.missing-resource-creation-strategy", "create-on-start")
                 .with("mp.messaging.incoming.in.consumer.queue.subscriptions", topic)
                 .with("mp.messaging.outgoing.out.connector", "quarkus-solace")
-                .with("mp.messaging.outgoing.out.topic", processedTopic);
+                .with("mp.messaging.outgoing.out.producer.topic", processedTopic);
 
         // Run app that processes messages
         MyProcessor app = runApplication(config, MyProcessor.class);

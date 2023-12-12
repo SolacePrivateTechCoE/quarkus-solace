@@ -1,4 +1,4 @@
-package io.quarkiverse.solace.util;
+package io.quarkiverse.solace.incoming;
 
 import java.util.Properties;
 
@@ -9,7 +9,7 @@ import com.solace.messaging.receiver.InboundMessage;
 
 import io.quarkiverse.solace.SolaceConnectorIncomingConfiguration;
 
-public class OutboundErrorMessageMapper {
+class OutboundErrorMessageMapper {
 
     public OutboundMessage mapError(OutboundMessageBuilder messageBuilder, InboundMessage inputMessage,
             SolaceConnectorIncomingConfiguration incomingConfiguration) {

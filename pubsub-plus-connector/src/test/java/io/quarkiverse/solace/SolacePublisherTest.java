@@ -27,7 +27,7 @@ public class SolacePublisherTest extends WeldTestBase {
     void publisher() {
         MapBasedConfig config = new MapBasedConfig()
                 .with("mp.messaging.outgoing.out.connector", "quarkus-solace")
-                .with("mp.messaging.outgoing.out.topic", topic);
+                .with("mp.messaging.outgoing.out.producer.topic", topic);
 
         List<String> expected = new CopyOnWriteArrayList<>();
 

@@ -7,29 +7,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.TimeUnit;
+
+import jakarta.enterprise.context.ApplicationScoped;
+
+import org.eclipse.microprofile.reactive.messaging.Incoming;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import com.solace.messaging.config.SolaceProperties;
 import com.solace.messaging.publisher.OutboundMessage;
 import com.solace.messaging.publisher.OutboundMessageBuilder;
-import com.solacesystems.jcsmp.AccessDeniedException;
-import io.quarkiverse.solace.base.SolaceBrokerExtension;
-import io.quarkiverse.solace.base.SolaceContainer;
-import jakarta.enterprise.context.ApplicationScoped;
-
-import org.eclipse.microprofile.reactive.messaging.Incoming;
-import org.junit.Ignore;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Test;
-
 import com.solace.messaging.publisher.PersistentMessagePublisher;
 import com.solace.messaging.receiver.InboundMessage;
 import com.solace.messaging.resources.Topic;
 
+import io.quarkiverse.solace.base.SolaceContainer;
 import io.quarkiverse.solace.base.WeldTestBase;
 import io.smallrye.reactive.messaging.test.common.config.MapBasedConfig;
-import org.junit.jupiter.api.TestMethodOrder;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class SolaceConsumerTest extends WeldTestBase {
@@ -69,11 +65,11 @@ public class SolaceConsumerTest extends WeldTestBase {
                 .with("mp.messaging.incoming.in.consumer.queue.name", SolaceContainer.INTEGRATION_TEST_QUEUE_NAME)
                 .with("mp.messaging.incoming.in.consumer.queue.type", "durable-exclusive")
                 .with("mp.messaging.incoming.in.consumer.queue.publish-to-error-topic-on-failure", true)
-                .with("mp.messaging.incoming.in.consumer.queue.error.topic", SolaceContainer.INTEGRATION_TEST_ERROR_QUEUE_SUBSCRIPTION)
+                .with("mp.messaging.incoming.in.consumer.queue.error.topic",
+                        SolaceContainer.INTEGRATION_TEST_ERROR_QUEUE_SUBSCRIPTION)
                 .with("mp.messaging.incoming.error-in.connector", "quarkus-solace")
                 .with("mp.messaging.incoming.error-in.consumer.queue.name", SolaceContainer.INTEGRATION_TEST_ERROR_QUEUE_NAME)
                 .with("mp.messaging.incoming.error-in.consumer.queue.type", "durable-exclusive");
-
 
         // Run app that consumes messages
         MyErrorQueueConsumer app = runApplication(config, MyErrorQueueConsumer.class);
@@ -142,26 +138,15 @@ public class SolaceConsumerTest extends WeldTestBase {
                 .with("mp.messaging.incoming.in.consumer.queue.type", "durable-exclusive")
                 .with("mp.messaging.incoming.in.consumer.queue.subscriptions", topic);
 
-
-
         Exception exception = assertThrows(Exception.class, () -> {
             // Run app that consumes messages
             MyConsumer app = runApplication(config, MyConsumer.class);
         });
 
-//        // Produce messages
-//        PersistentMessagePublisher publisher = messagingService.createPersistentMessagePublisherBuilder()
-//                .build()
-//                .start();
-//        Topic tp = Topic.of(topic);
-//        publisher.publish("1", tp);
-//        publisher.publish("2", tp);
-//        publisher.publish("3", tp);
-//        publisher.publish("4", tp);
-//        publisher.publish("5", tp);
-
         // Assert on published messages
-        await().untilAsserted(() -> assertThat(exception.getMessage()).contains("com.solacesystems.jcsmp.AccessDeniedException: Permission Not Allowed - Queue '" + SolaceContainer.INTEGRATION_TEST_QUEUE_NAME + "' - Topic '" + topic));
+        await().untilAsserted(() -> assertThat(exception.getMessage())
+                .contains("com.solacesystems.jcsmp.AccessDeniedException: Permission Not Allowed - Queue '"
+                        + SolaceContainer.INTEGRATION_TEST_QUEUE_NAME + "' - Topic '" + topic));
     }
 
     @ApplicationScoped
@@ -197,7 +182,6 @@ public class SolaceConsumerTest extends WeldTestBase {
         public List<String> getReceived() {
             return received;
         }
-
 
         public List<String> getReceivedDMQMessages() {
             return receivedDMQMessages;

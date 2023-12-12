@@ -1,4 +1,4 @@
-package io.quarkiverse.solace.util;
+package io.quarkiverse.solace.incoming;
 
 import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
@@ -12,11 +12,10 @@ import com.solace.messaging.resources.Topic;
 
 import io.quarkiverse.solace.SolaceConnectorIncomingConfiguration;
 import io.quarkiverse.solace.i18n.SolaceLogging;
-import io.quarkiverse.solace.incoming.SolaceInboundMessage;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.subscription.UniEmitter;
 
-public class SolaceErrorTopicPublisherHandler implements PersistentMessagePublisher.MessagePublishReceiptListener {
+class SolaceErrorTopicPublisherHandler implements PersistentMessagePublisher.MessagePublishReceiptListener {
 
     private final MessagingService solace;
     private final String errorTopic;
