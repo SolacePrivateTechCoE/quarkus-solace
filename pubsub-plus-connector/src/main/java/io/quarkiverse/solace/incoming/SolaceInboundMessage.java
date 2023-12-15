@@ -2,13 +2,14 @@ package io.quarkiverse.solace.incoming;
 
 import static io.smallrye.reactive.messaging.providers.locals.ContextAwareMessage.captureContextMetadata;
 
+import java.time.Duration;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.TimeUnit;
 
+import io.smallrye.mutiny.unchecked.Unchecked;
 import org.eclipse.microprofile.reactive.messaging.Metadata;
 
 import com.solace.messaging.config.MessageAcknowledgementConfiguration;
-import com.solace.messaging.publisher.PersistentMessagePublisher;
+import com.solace.messaging.publisher.PersistentMessagePublisher.PublishReceipt;
 import com.solace.messaging.receiver.InboundMessage;
 
 import io.netty.handler.codec.http.HttpHeaderValues;
@@ -98,19 +99,17 @@ public class SolaceInboundMessage<T> implements ContextAwareMessage<T>, Metadata
     @Override
     public CompletionStage<Void> nack(Throwable reason, Metadata nackMetadata) {
         if (solaceErrorTopicPublisherHandler != null) {
-            try {
-                PersistentMessagePublisher.PublishReceipt publishReceipt = solaceErrorTopicPublisherHandler.handle(this, ic)
-                        .orTimeout(30, TimeUnit.SECONDS).get(); // TODO :: Decide on timeout or make it configurable
-                if (publishReceipt != null) {
-                    this.unacknowledgedMessageTracker.decrement();
-                    return nackHandler.handle(this, reason, nackMetadata, MessageAcknowledgementConfiguration.Outcome.ACCEPTED);
-                }
-            } catch (Throwable e) {
-                SolaceLogging.log.unsuccessfulToTopic(ic.getConsumerQueueErrorTopic().orElse(""), ic.getChannel());
-                if (ic.getConsumerQueueEnableNacks()) {
-                    return nackHandler.handle(this, reason, nackMetadata,
-                            MessageAcknowledgementConfiguration.Outcome.FAILED);
-                }
+            PublishReceipt publishReceipt = solaceErrorTopicPublisherHandler.handle(this, ic)
+                    .onFailure().retry().withBackOff(Duration.ofSeconds(1)).atMost(ic.getConsumerQueueErrorMessageMaxDeliveryAttempts())
+                    .onFailure().transform((throwable -> {
+                        SolaceLogging.log.unsuccessfulToTopic(ic.getConsumerQueueErrorTopic().get(), ic.getChannel());
+                        throw new RuntimeException(throwable);
+                    }))
+                    .await().atMost(Duration.ofSeconds(30));
+
+            if (publishReceipt != null) {
+                this.unacknowledgedMessageTracker.decrement();
+                return nackHandler.handle(this, reason, nackMetadata, MessageAcknowledgementConfiguration.Outcome.ACCEPTED);
             }
         }
 

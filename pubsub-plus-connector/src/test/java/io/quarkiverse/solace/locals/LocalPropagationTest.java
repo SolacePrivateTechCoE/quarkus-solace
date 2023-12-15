@@ -45,7 +45,7 @@ public class LocalPropagationTest extends WeldTestBase {
                 .with("mp.messaging.incoming.data.consumer.queue.subscriptions", topic)
                 .with("mp.messaging.incoming.data.consumer.queue.add-additional-subscriptions", "true")
                 .with("mp.messaging.incoming.data.consumer.queue.missing-resource-creation-strategy", "create-on-start")
-                .with("mp.messaging.incoming.data.consumer.queue.name", topic);
+                .with("mp.messaging.incoming.data.consumer.queue.name", queue);
     }
 
     private void sendMessages() {

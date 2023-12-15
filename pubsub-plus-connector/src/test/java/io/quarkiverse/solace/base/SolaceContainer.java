@@ -19,10 +19,10 @@ import com.github.dockerjava.api.model.Ulimit;
 public class SolaceContainer extends GenericContainer<SolaceContainer> {
 
     public static final String INTEGRATION_TEST_QUEUE_NAME = "integration-test-queue";
-    public static final String INTEGRATION_TEST_QUEUE_SUBSCRIPTION = "quarkus/integration/test";
+    public static final String INTEGRATION_TEST_QUEUE_SUBSCRIPTION = "quarkus/integration/test/provisioned/queue/topic";
     public static final String INTEGRATION_TEST_DMQ_NAME = "integration-test-queue-dmq";
     public static final String INTEGRATION_TEST_ERROR_QUEUE_NAME = "integration-test-error-queue";
-    public static final String INTEGRATION_TEST_ERROR_QUEUE_SUBSCRIPTION = "solace/quarkus/error";
+    public static final String INTEGRATION_TEST_ERROR_QUEUE_SUBSCRIPTION = "quarkus/integration/test/provisioned/queue/error/topic";
 
     private static final DockerImageName DEFAULT_IMAGE_NAME = DockerImageName.parse("solace/solace-pubsub-standard");
 
@@ -42,13 +42,10 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
 
     private String password = "password";
 
-    private String integrationTestUser = "integrationtest";
-
-    private String integrationTestPassword = "integrationtest";
-
     private String vpn = DEFAULT_VPN;
 
-    private final List<Pair<String, Service>> topicsConfiguration = new ArrayList<>();
+    private final List<Pair<String, Service>> publishTopicsConfiguration = new ArrayList<>();
+    private final List<Pair<String, Service>> subscribeTopicsConfiguration = new ArrayList<>();
 
     private boolean withClientCert;
 
@@ -131,27 +128,27 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
         updateConfigScript(scriptBuilder, "exit");
         updateConfigScript(scriptBuilder, "exit");
 
-        // Integration test user acl
-        updateConfigScript(scriptBuilder,
-                "create acl-profile integration-test-user-acl message-vpn " + vpn + " allow-client-connect");
-        updateConfigScript(scriptBuilder, "exit");
-
-        updateConfigScript(scriptBuilder, "acl-profile integration-test-user-acl message-vpn " + vpn);
-        updateConfigScript(scriptBuilder, "publish-topic exceptions smf list quarkus/integration/test");
-        updateConfigScript(scriptBuilder, "exit");
-
-        // Integration test user
-        updateConfigScript(scriptBuilder, "create client-username " + integrationTestUser + " message-vpn " + vpn);
-        updateConfigScript(scriptBuilder, "password " + integrationTestPassword);
-        updateConfigScript(scriptBuilder, "acl-profile integration-test-user-acl");
-        updateConfigScript(scriptBuilder, "client-profile default");
-        updateConfigScript(scriptBuilder, "no shutdown");
-        updateConfigScript(scriptBuilder, "exit");
-
-        updateConfigScript(scriptBuilder, "client-profile default");
-        updateConfigScript(scriptBuilder, "allow-guaranteed-message-receive");
-        updateConfigScript(scriptBuilder, "allow-guaranteed-message-send");
-        updateConfigScript(scriptBuilder, "exit");
+//        // Integration test user acl
+//        updateConfigScript(scriptBuilder,
+//                "create acl-profile integration-test-user-acl message-vpn " + vpn + " allow-client-connect");
+//        updateConfigScript(scriptBuilder, "exit");
+//
+//        updateConfigScript(scriptBuilder, "acl-profile integration-test-user-acl message-vpn " + vpn);
+//        updateConfigScript(scriptBuilder, "publish-topic exceptions smf list quarkus/integration/test");
+//        updateConfigScript(scriptBuilder, "exit");
+//
+//        // Integration test user
+//        updateConfigScript(scriptBuilder, "create client-username " + "int_user" + " message-vpn " + vpn);
+//        updateConfigScript(scriptBuilder, "password " + "int_pass");
+//        updateConfigScript(scriptBuilder, "acl-profile integration-test-user-acl");
+//        updateConfigScript(scriptBuilder, "client-profile default");
+//        updateConfigScript(scriptBuilder, "no shutdown");
+//        updateConfigScript(scriptBuilder, "exit");
+//
+//        updateConfigScript(scriptBuilder, "client-profile default");
+//        updateConfigScript(scriptBuilder, "allow-guaranteed-message-receive");
+//        updateConfigScript(scriptBuilder, "allow-guaranteed-message-send");
+//        updateConfigScript(scriptBuilder, "exit");
 
         // Create VPN if not default
         if (!vpn.equals(DEFAULT_VPN)) {
@@ -166,6 +163,7 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
         }
         updateConfigScript(scriptBuilder, "create client-username " + username + " message-vpn " + vpn);
         updateConfigScript(scriptBuilder, "password " + password);
+        updateConfigScript(scriptBuilder, "acl-profile default");
         updateConfigScript(scriptBuilder, "client-profile default");
         updateConfigScript(scriptBuilder, "no shutdown");
         updateConfigScript(scriptBuilder, "exit");
@@ -199,19 +197,23 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
             updateConfigScript(scriptBuilder, "end");
         }
 
-        if (!topicsConfiguration.isEmpty()) {
+        if (!publishTopicsConfiguration.isEmpty() || !subscribeTopicsConfiguration.isEmpty()) {
             // Enable services
             updateConfigScript(scriptBuilder, "configure");
             // Configure default ACL
             updateConfigScript(scriptBuilder, "acl-profile default message-vpn " + vpn);
             // Configure default action to disallow
-            updateConfigScript(scriptBuilder, "subscribe-topic default-action disallow");
-            updateConfigScript(scriptBuilder, "publish-topic default-action disallow");
+            if(!subscribeTopicsConfiguration.isEmpty()) {
+                updateConfigScript(scriptBuilder, "subscribe-topic default-action disallow");
+            }
+            if(!publishTopicsConfiguration.isEmpty()) {
+                updateConfigScript(scriptBuilder, "publish-topic default-action disallow");
+            }
             updateConfigScript(scriptBuilder, "exit");
 
             updateConfigScript(scriptBuilder, "message-vpn " + vpn);
             updateConfigScript(scriptBuilder, "service");
-            for (Pair<String, Service> topicConfig : topicsConfiguration) {
+            for (Pair<String, Service> topicConfig : publishTopicsConfiguration) {
                 Service service = topicConfig.getValue();
                 String topicName = topicConfig.getKey();
                 updateConfigScript(scriptBuilder, service.getName());
@@ -230,6 +232,28 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
                 updateConfigScript(
                         scriptBuilder,
                         String.format("publish-topic exceptions %s list %s", service.getName(), topicName));
+                updateConfigScript(scriptBuilder, "end");
+            }
+
+            updateConfigScript(scriptBuilder, "configure");
+            updateConfigScript(scriptBuilder, "message-vpn " + vpn);
+            updateConfigScript(scriptBuilder, "service");
+            for (Pair<String, Service> topicConfig : subscribeTopicsConfiguration) {
+                Service service = topicConfig.getValue();
+                String topicName = topicConfig.getKey();
+                updateConfigScript(scriptBuilder, service.getName());
+                if (service.isSupportSSL()) {
+                    if (withClientCert) {
+                        updateConfigScript(scriptBuilder, "ssl");
+                    } else {
+                        updateConfigScript(scriptBuilder, "plain-text");
+                    }
+                }
+                updateConfigScript(scriptBuilder, "no shutdown");
+                updateConfigScript(scriptBuilder, "end");
+                // Add publish/subscribe topic exceptions
+                updateConfigScript(scriptBuilder, "configure");
+                updateConfigScript(scriptBuilder, "acl-profile default message-vpn " + vpn);
                 updateConfigScript(
                         scriptBuilder,
                         String.format("subscribe-topic exceptions %s list %s", service.getName(), topicName));
@@ -293,8 +317,34 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
      * @param service Service to be supported on provided topic
      * @return This container.
      */
-    public SolaceContainer withTopic(String topic, Service service) {
-        topicsConfiguration.add(Pair.of(topic, service));
+//    public SolaceContainer withTopic(String topic, Service service) {
+//        topicsConfiguration.add(Pair.of(topic, service));
+//        addExposedPort(service.getPort());
+//        return this;
+//    }
+
+    /**
+     * Adds the publish topic exceptions configuration
+     *
+     * @param topic Name of the topic
+     * @param service Service to be supported on provided topic
+     * @return This container.
+     */
+    public SolaceContainer withPublishTopic(String topic, Service service) {
+        publishTopicsConfiguration.add(Pair.of(topic, service));
+        addExposedPort(service.getPort());
+        return this;
+    }
+
+    /**
+     * Adds the subscribe topic exceptions configuration
+     *
+     * @param topic Name of the topic
+     * @param service Service to be supported on provided topic
+     * @return This container.
+     */
+    public SolaceContainer withSubscribeTopic(String topic, Service service) {
+        subscribeTopicsConfiguration.add(Pair.of(topic, service));
         addExposedPort(service.getPort());
         return this;
     }
@@ -357,14 +407,6 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
      */
     public String getPassword() {
         return this.password;
-    }
-
-    public String getIntegrationTestUser() {
-        return integrationTestUser;
-    }
-
-    public String getIntegrationTestPassword() {
-        return integrationTestPassword;
     }
 
     public enum Service {

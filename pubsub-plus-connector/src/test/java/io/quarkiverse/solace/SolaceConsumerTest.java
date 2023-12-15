@@ -7,7 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 
+import com.solace.messaging.MessagingService;
+import com.solace.messaging.config.profile.ConfigurationProfile;
+import io.quarkiverse.solace.base.MessagingServiceProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.eclipse.microprofile.reactive.messaging.Incoming;
@@ -78,7 +82,7 @@ public class SolaceConsumerTest extends WeldTestBase {
         PersistentMessagePublisher publisher = messagingService.createPersistentMessagePublisherBuilder()
                 .build()
                 .start();
-        Topic tp = Topic.of("quarkus/integration/test");
+        Topic tp = Topic.of(SolaceContainer.INTEGRATION_TEST_QUEUE_SUBSCRIPTION);
         OutboundMessageBuilder messageBuilder = messagingService.messageBuilder();
         OutboundMessage outboundMessage = messageBuilder.build("2");
         publisher.publish(outboundMessage, tp);
@@ -147,6 +151,34 @@ public class SolaceConsumerTest extends WeldTestBase {
         await().untilAsserted(() -> assertThat(exception.getMessage())
                 .contains("com.solacesystems.jcsmp.AccessDeniedException: Permission Not Allowed - Queue '"
                         + SolaceContainer.INTEGRATION_TEST_QUEUE_NAME + "' - Topic '" + topic));
+    }
+
+    @Test
+    @Order(5)
+    void consumerPublishToErrorTopicPermissionException() {
+        MapBasedConfig config = new MapBasedConfig()
+                .with("mp.messaging.incoming.in.connector", "quarkus-solace")
+                .with("mp.messaging.incoming.in.consumer.queue.name", SolaceContainer.INTEGRATION_TEST_QUEUE_NAME)
+                .with("mp.messaging.incoming.in.consumer.queue.type", "durable-exclusive")
+                .with("mp.messaging.incoming.in.consumer.queue.publish-to-error-topic-on-failure", true)
+                .with("mp.messaging.incoming.in.consumer.queue.error.topic",
+                       "publish/deny")
+                .with("mp.messaging.incoming.error-in.connector", "quarkus-solace")
+                .with("mp.messaging.incoming.error-in.consumer.queue.name", SolaceContainer.INTEGRATION_TEST_ERROR_QUEUE_NAME)
+                .with("mp.messaging.incoming.error-in.consumer.queue.type", "durable-exclusive");
+
+        // Run app that consumes messages
+        MyErrorQueueConsumer app = runApplication(config, MyErrorQueueConsumer.class);
+        // Produce messages
+        PersistentMessagePublisher publisher = messagingService.createPersistentMessagePublisherBuilder()
+                .build()
+                .start();
+        Topic tp = Topic.of(SolaceContainer.INTEGRATION_TEST_QUEUE_SUBSCRIPTION);
+        OutboundMessageBuilder messageBuilder = messagingService.messageBuilder();
+        OutboundMessage outboundMessage = messageBuilder.build("2");
+        publisher.publish(outboundMessage, tp);
+
+        await().untilAsserted(() -> assertThat(app.getReceived().size()).isEqualTo(0));
     }
 
     @ApplicationScoped

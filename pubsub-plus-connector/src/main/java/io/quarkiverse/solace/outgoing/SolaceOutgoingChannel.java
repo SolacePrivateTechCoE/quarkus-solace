@@ -73,6 +73,13 @@ public class SolaceOutgoingChannel
         if (!lazyStart) {
             this.publisher.start();
         }
+
+        this.publisher.setPublisherReadinessListener(new PublisherHealthCheck.PublisherReadinessListener() {
+            @Override
+            public void ready() {
+                isPublisherReady = true;
+            }
+        });
     }
 
     private Uni<Void> sendMessage(MessagingService solace, Message<?> m, boolean waitForPublishReceipt) {
@@ -143,16 +150,19 @@ public class SolaceOutgoingChannel
         return Uni.createFrom().<PublishReceipt> emitter(e -> {
             boolean exitExceptionally = false;
             try {
-                if (waitForPublishReceipt) {
-                    publisher.publish(outboundMessage, topic.get(), e);
-                } else {
-                    publisher.publish(outboundMessage, topic.get());
-                    e.complete(null);
-                    publishedMessagesTracker.decrement();
+                if(isPublisherReady) {
+                    if (waitForPublishReceipt) {
+                        publisher.publish(outboundMessage, topic.get(), e);
+                    } else {
+                        publisher.publish(outboundMessage, topic.get());
+                        e.complete(null);
+                        publishedMessagesTracker.decrement();
+                    }
                 }
             } catch (PubSubPlusClientException.PublisherOverflowException publisherOverflowException) {
                 isPublisherReady = false;
                 exitExceptionally = true;
+                e.fail(publisherOverflowException);
             } catch (Throwable t) {
                 e.fail(t);
             } finally {

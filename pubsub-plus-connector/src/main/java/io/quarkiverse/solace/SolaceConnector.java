@@ -66,7 +66,7 @@ import io.vertx.mutiny.core.Vertx;
 @ConnectorAttribute(name = "producer.waitForPublishReceipt", type = "boolean", direction = OUTGOING, description = "Whether the client waits to receive the publish receipt from Solace broker before acknowledging the message", defaultValue = "true")
 @ConnectorAttribute(name = "producer.delivery.ack.timeout", type = "int", direction = OUTGOING, description = "Delivery ack timeout")
 @ConnectorAttribute(name = "producer.delivery.ack.window.size", type = "int", direction = OUTGOING, description = "Delivery ack window size")
-@ConnectorAttribute(name = "producer.back-pressure.strategy", type = "string", direction = OUTGOING, description = "Outgoing messages backpressure strategy", defaultValue = "elastic")
+@ConnectorAttribute(name = "producer.back-pressure.strategy", type = "string", direction = OUTGOING, description = "Outgoing messages backpressure strategy", defaultValue = "reject")
 @ConnectorAttribute(name = "producer.back-pressure.buffer-capacity", type = "int", direction = OUTGOING, description = "Outgoing messages backpressure buffer capacity", defaultValue = "1024")
 //@ConnectorAttribute(name = "producer.max-publish-attempts", type = "int", direction = OUTGOING, description = "Maximum number of attempts to publish message in case of failure. Each attempt will have a backoff interval of 1 second. When all delivery attempts have been exhausted, an exception is thrown.", defaultValue = "3")
 public class SolaceConnector implements InboundConnector, OutboundConnector, HealthReporter {

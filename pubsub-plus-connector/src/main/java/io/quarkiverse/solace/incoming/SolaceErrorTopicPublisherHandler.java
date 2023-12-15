@@ -31,33 +31,27 @@ class SolaceErrorTopicPublisherHandler implements PersistentMessagePublisher.Mes
         outboundErrorMessageMapper = new OutboundErrorMessageMapper();
     }
 
-    public CompletableFuture<PublishReceipt> handle(SolaceInboundMessage<?> message,
+    public Uni<PublishReceipt> handle(SolaceInboundMessage<?> message,
             SolaceConnectorIncomingConfiguration ic) {
         OutboundMessage outboundMessage = outboundErrorMessageMapper.mapError(this.solace.messageBuilder(),
                 message.getMessage(),
                 ic);
-        //        if (ic.getConsumerQueueErrorMessageWaitForPublishReceipt().get()) {
         publisher.setMessagePublishReceiptListener(this);
         //        }
-        return Uni.createFrom().<PublishReceipt> emitter(e -> {
+        return Uni.createFrom().<PublishReceipt>emitter(e -> {
             try {
-                //                if (ic.getConsumerQueueErrorMessageWaitForPublishReceipt().get()) {
-                //                    publisher.publish(outboundMessage, Topic.of(errorTopic), e);
-                //                } else {
-                //                    publisher.publish(outboundMessage, Topic.of(errorTopic));
-                //                    e.complete(null);
-                //                }
+                // always wait for error message publish receipt to ensure it is successfully spooled on broker.
                 publisher.publish(outboundMessage, Topic.of(errorTopic), e);
             } catch (Throwable t) {
+                SolaceLogging.log.publishException(this.errorTopic);
                 e.fail(t);
             }
-        }).onFailure().retry().withBackOff(Duration.ofSeconds(1)).atMost(ic.getConsumerQueueErrorMessageMaxDeliveryAttempts())
-                .subscribeAsCompletionStage();
+        }).invoke(() -> System.out.println(""));
     }
 
     @Override
-    public void onPublishReceipt(PersistentMessagePublisher.PublishReceipt publishReceipt) {
-        UniEmitter<PersistentMessagePublisher.PublishReceipt> uniEmitter = (UniEmitter<PersistentMessagePublisher.PublishReceipt>) publishReceipt
+    public void onPublishReceipt(PublishReceipt publishReceipt) {
+        UniEmitter<PublishReceipt> uniEmitter = (UniEmitter<PublishReceipt>) publishReceipt
                 .getUserContext();
         PubSubPlusClientException exception = publishReceipt.getException();
         if (exception != null) {
