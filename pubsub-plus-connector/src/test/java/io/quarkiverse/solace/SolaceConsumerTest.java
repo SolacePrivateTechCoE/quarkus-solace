@@ -39,6 +39,7 @@ public class SolaceConsumerTest extends WeldTestBase {
     void consumer() {
         MapBasedConfig config = new MapBasedConfig()
                 .with("mp.messaging.incoming.in.connector", "quarkus-solace")
+                .with("mp.messaging.incoming.in.consumer.queue.name", queue)
                 .with("mp.messaging.incoming.in.consumer.queue.add-additional-subscriptions", "true")
                 .with("mp.messaging.incoming.in.consumer.queue.missing-resource-creation-strategy", "create-on-start")
                 .with("mp.messaging.incoming.in.consumer.queue.subscriptions", topic);
@@ -63,6 +64,56 @@ public class SolaceConsumerTest extends WeldTestBase {
 
     @Test
     @Order(2)
+    void consumerReplay() {
+        MapBasedConfig config = new MapBasedConfig()
+                .with("mp.messaging.incoming.in.connector", "quarkus-solace")
+                .with("mp.messaging.incoming.in.consumer.queue.name", queue)
+                .with("mp.messaging.incoming.in.consumer.queue.type", "durable-exclusive")
+                .with("mp.messaging.incoming.in.consumer.queue.add-additional-subscriptions", "true")
+                .with("mp.messaging.incoming.in.consumer.queue.missing-resource-creation-strategy", "create-on-start")
+                .with("mp.messaging.incoming.in.consumer.queue.subscriptions", topic)
+                .with("mp.messaging.incoming.in.consumer.queue.replay.strategy", "all-messages");
+
+        // Run app that consumes messages
+        MyConsumer app = runApplication(config, MyConsumer.class);
+
+        // Assert on published messages
+        await().untilAsserted(() -> assertThat(app.getReceived().size()).isEqualTo(5));
+        await().untilAsserted(() -> assertThat(app.getReceived()).contains("1", "2", "3", "4", "5"));
+    }
+
+    @Test
+    @Order(3)
+    void consumerWithSelectorQuery() {
+        MapBasedConfig config = new MapBasedConfig()
+                .with("mp.messaging.incoming.in.connector", "quarkus-solace")
+                .with("mp.messaging.incoming.in.consumer.queue.name", queue)
+                .with("mp.messaging.incoming.in.consumer.queue.add-additional-subscriptions", "true")
+                .with("mp.messaging.incoming.in.consumer.queue.missing-resource-creation-strategy", "create-on-start")
+                .with("mp.messaging.incoming.in.consumer.queue.selector-query", "id = '1'")
+                .with("mp.messaging.incoming.in.consumer.queue.subscriptions", topic);
+
+        // Run app that consumes messages
+        MyConsumer app = runApplication(config, MyConsumer.class);
+
+        // Produce messages
+        PersistentMessagePublisher publisher = messagingService.createPersistentMessagePublisherBuilder()
+                .build()
+                .start();
+        Topic tp = Topic.of(topic);
+        publisher.publish(messagingService.messageBuilder().withProperty("id", "1").build("1"), tp);
+        publisher.publish(messagingService.messageBuilder().withProperty("id", "2").build("2"), tp);
+        publisher.publish(messagingService.messageBuilder().withProperty("id", "3").build("3"), tp);
+        publisher.publish(messagingService.messageBuilder().withProperty("id", "4").build("4"), tp);
+        publisher.publish(messagingService.messageBuilder().withProperty("id", "5").build("5"), tp);
+
+        // Assert on published messages
+        await().untilAsserted(() -> assertThat(app.getReceived().size()).isEqualTo(1));
+        await().untilAsserted(() -> assertThat(app.getReceived()).contains("1"));
+    }
+
+    @Test
+    @Order(4)
     void consumerFailedProcessingPublishToErrorTopic() {
         MapBasedConfig config = new MapBasedConfig()
                 .with("mp.messaging.incoming.in.connector", "quarkus-solace")
@@ -98,7 +149,7 @@ public class SolaceConsumerTest extends WeldTestBase {
     }
 
     @Test
-    @Order(3)
+    @Order(5)
     void consumerFailedProcessingMoveToDMQ() {
         MapBasedConfig config = new MapBasedConfig()
                 .with("mp.messaging.incoming.in.connector", "quarkus-solace")
@@ -132,7 +183,7 @@ public class SolaceConsumerTest extends WeldTestBase {
     }
 
     @Test
-    @Order(4)
+    @Order(6)
     void consumerCreateMissingResourceAddSubscriptionPermissionException() {
         MapBasedConfig config = new MapBasedConfig()
                 .with("mp.messaging.incoming.in.connector", "quarkus-solace")
@@ -154,7 +205,7 @@ public class SolaceConsumerTest extends WeldTestBase {
     }
 
     @Test
-    @Order(5)
+    @Order(7)
     void consumerPublishToErrorTopicPermissionException() {
         MapBasedConfig config = new MapBasedConfig()
                 .with("mp.messaging.incoming.in.connector", "quarkus-solace")

@@ -93,6 +93,14 @@ public class SolaceContainer extends GenericContainer<SolaceContainer> {
         updateConfigScript(scriptBuilder, "enable");
         updateConfigScript(scriptBuilder, "configure");
 
+        // create replay log
+        updateConfigScript(scriptBuilder, "message-spool message-vpn default");
+        updateConfigScript(scriptBuilder, "create replay-log integration-test-replay-log");
+        updateConfigScript(scriptBuilder, "max-spool-usage 10");
+        updateConfigScript(scriptBuilder, "no shutdown");
+        updateConfigScript(scriptBuilder, "exit");
+        updateConfigScript(scriptBuilder, "exit");
+
         // create Error queue, DMQ and a queue. Assign DMQ to queue
 
         // Error Queue
