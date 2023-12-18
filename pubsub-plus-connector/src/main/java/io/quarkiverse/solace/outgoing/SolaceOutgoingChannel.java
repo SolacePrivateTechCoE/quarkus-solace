@@ -45,7 +45,6 @@ public class SolaceOutgoingChannel
     public SolaceOutgoingChannel(Vertx vertx, SolaceConnectorOutgoingConfiguration oc, MessagingService solace) {
         this.channel = oc.getChannel();
         PersistentMessagePublisherBuilder builder = solace.createPersistentMessagePublisherBuilder();
-        // TODO which default backpressure strategy : wait or elastic?
         switch (oc.getProducerBackPressureStrategy()) {
             case "elastic":
                 builder.onBackPressureElastic();
@@ -84,6 +83,7 @@ public class SolaceOutgoingChannel
 
     private Uni<Void> sendMessage(MessagingService solace, Message<?> m, boolean waitForPublishReceipt) {
 
+        // TODO - Use isPublisherReady to check if publisher is in ready state before publishing. This is required when back-pressure is set to reject. We need to block this call till isPublisherReady is true
         return publishMessage(publisher, m, solace.messageBuilder(), waitForPublishReceipt)
                 .onItem().transformToUni(receipt -> {
                     if (receipt != null) {

@@ -46,6 +46,7 @@ import io.vertx.mutiny.core.Vertx;
 @ConnectorAttribute(name = "consumer.queue.subscriptions", type = "string", direction = INCOMING, description = "The comma separated list of subscriptions, the channel name if empty")
 @ConnectorAttribute(name = "consumer.queue.type", type = "string", direction = INCOMING, description = "The queue type of receiver", defaultValue = "durable-non-exclusive")
 @ConnectorAttribute(name = "consumer.queue.name", type = "string", direction = INCOMING, description = "The queue name of receiver")
+// TODO implement consumer concurrency
 //@ConnectorAttribute(name = "consumer.queue.concurrency", type = "int", direction = INCOMING, description = "The number of concurrent consumers", defaultValue = "1")
 @ConnectorAttribute(name = "consumer.queue.polled-wait-time-in-millis", type = "int", direction = INCOMING, description = "Maximum wait time for polled consumers to receive a message from configured queue", defaultValue = "100")
 @ConnectorAttribute(name = "consumer.queue.missing-resource-creation-strategy", type = "string", direction = INCOMING, description = "Missing resource creation strategy", defaultValue = "do-not-create")
@@ -58,7 +59,6 @@ import io.vertx.mutiny.core.Vertx;
 @ConnectorAttribute(name = "consumer.queue.error.topic", type = "string", direction = INCOMING, description = "The error topic where message should be published in case of error")
 @ConnectorAttribute(name = "consumer.queue.error.message.dmq-eligible", type = "boolean", direction = INCOMING, description = "Whether error message is eligible to move to dead message queue", defaultValue = "false")
 @ConnectorAttribute(name = "consumer.queue.error.message.ttl", type = "long", direction = INCOMING, description = "Error message TTL before moving to dead message queue")
-//@ConnectorAttribute(name = "consumer.queue.error.message.wait-for-publish-receipt", type = "boolean", direction = INCOMING, description = "Whether the client waits to receive the publish receipt from Solace broker for the published error message")
 @ConnectorAttribute(name = "consumer.queue.error.message.max-delivery-attempts", type = "int", direction = INCOMING, description = "Maximum number of attempts to send a failed message to the error topic in case of failure. Each attempt will have a backoff interval of 1 second. When all delivery attempts have been exhausted, the failed message will be requeued on the queue for redelivery.", defaultValue = "3")
 
 @ConnectorAttribute(name = "producer.topic", type = "string", direction = OUTGOING, description = "The topic to publish messages, by default the channel name")
@@ -68,7 +68,6 @@ import io.vertx.mutiny.core.Vertx;
 @ConnectorAttribute(name = "producer.delivery.ack.window.size", type = "int", direction = OUTGOING, description = "Delivery ack window size")
 @ConnectorAttribute(name = "producer.back-pressure.strategy", type = "string", direction = OUTGOING, description = "Outgoing messages backpressure strategy", defaultValue = "reject")
 @ConnectorAttribute(name = "producer.back-pressure.buffer-capacity", type = "int", direction = OUTGOING, description = "Outgoing messages backpressure buffer capacity", defaultValue = "1024")
-//@ConnectorAttribute(name = "producer.max-publish-attempts", type = "int", direction = OUTGOING, description = "Maximum number of attempts to publish message in case of failure. Each attempt will have a backoff interval of 1 second. When all delivery attempts have been exhausted, an exception is thrown.", defaultValue = "3")
 public class SolaceConnector implements InboundConnector, OutboundConnector, HealthReporter {
 
     public static final String CONNECTOR_NAME = "quarkus-solace";

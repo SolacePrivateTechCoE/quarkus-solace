@@ -101,31 +101,11 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
             });
         }
 
-        Integer realTimeout;
-        final Long expiry = ic.getConsumerQueuePolledWaitTimeInMillis() != null
-                ? ic.getConsumerQueuePolledWaitTimeInMillis() + System.currentTimeMillis()
-                : null;
-        if (expiry != null) {
-            try {
-                realTimeout = Math.toIntExact(expiry - System.currentTimeMillis());
-                if (realTimeout < 0) {
-                    realTimeout = 0;
-                }
-            } catch (ArithmeticException e) {
-                //                SolaceLogging.log.debug("Failed to compute real timeout", e);
-                // Always true: expiry - System.currentTimeMillis() < timeoutInMillis
-                // So just set it to 0 (no-wait) if we underflow
-                realTimeout = 0;
-            }
-        } else {
-            realTimeout = null;
-        }
-        Integer finalRealTimeout = realTimeout;
+        Integer timeout = getTimeout(ic.getConsumerQueuePolledWaitTimeInMillis());
         // TODO Here use a subscription receiver.receiveAsync with an internal queue
         this.pollerThread = Executors.newSingleThreadExecutor();
         this.stream = Multi.createBy().repeating()
-                .uni(() -> Uni.createFrom().item(finalRealTimeout == null ? receiver.receiveMessage()
-                        : (finalRealTimeout == 0 ? receiver.receiveMessage(0) : receiver.receiveMessage(finalRealTimeout)))
+                .uni(() -> Uni.createFrom().item(timeout == null ? receiver.receiveMessage() : receiver.receiveMessage(timeout))
                         .runSubscriptionOn(pollerThread))
                 .until(__ -> closed.get())
                 .emitOn(context::runOnContext)
@@ -137,6 +117,29 @@ public class SolaceIncomingChannel implements ReceiverActivationPassivationConfi
         if (!lazyStart) {
             receiver.start();
         }
+    }
+
+    private Integer getTimeout(Integer timeoutInMillis) {
+        Integer realTimeout;
+        final Long expiry = timeoutInMillis != null
+                ? timeoutInMillis + System.currentTimeMillis()
+                : null;
+        if (expiry != null) {
+            try {
+                realTimeout = Math.toIntExact(expiry - System.currentTimeMillis());
+                if (realTimeout < 0) {
+                    realTimeout = 0;
+                }
+            } catch (ArithmeticException e) {
+                // Always true: expiry - System.currentTimeMillis() < timeoutInMillis
+                // So just set it to 0 (no-wait) if we underflow
+                realTimeout = 0;
+            }
+        } else {
+            realTimeout = null;
+        }
+
+        return realTimeout;
     }
 
     private static Queue getQueue(SolaceConnectorIncomingConfiguration ic) {
