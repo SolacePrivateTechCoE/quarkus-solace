@@ -34,13 +34,13 @@ jobs:
         bundler-cache: true
         cache-version: 0
     - name: Generate Site
-      run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}/docs"
+      run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}/docs/"
       env:
         JEKYLL_ENV: production
     - name: Upload Artifacts
       uses: actions/upload-pages-artifact@v1
       with:
-        path: "/home/runner/work/quarkus-solace/quarkus-solace/_site"
+        path: "/home/runner/work/quarkus-solace/quarkus-solace/docs/"
     - name: Deploy to GitHub Pages
       id: deployment
       uses: actions/deploy-pages@v2
