@@ -25,6 +25,8 @@ jobs:
     - name: Configure Pages
       id: pages
       uses: actions/configure-pages@v3
+    - name: Swtich to docs folder
+      run: cd ./docs/
     - name: Generate Site
       run: mvn clean install -DskipTests
     - name: Upload Artifacts
