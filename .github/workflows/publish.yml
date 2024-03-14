@@ -29,7 +29,6 @@ jobs:
       uses: actions/configure-pages@v3
     - name: Generate Site
       run: |
-        cd ./docs
         mvn clean install -DskipTests
     - name: Upload Artifacts
       uses: actions/upload-pages-artifact@v1
