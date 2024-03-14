@@ -12,8 +12,8 @@ asciidoc: {}
 asciidoctor:
   base_dir: docs/modules/ROOT/pages
   safe: unsafe
-  attributes:
-    icons: font
-    idseparator: _
-    stylesdir: css
-    source-highlighter: coderay
+  # attributes:
+  #   icons: font
+  #   idseparator: _
+  #   stylesdir: css
+  #   source-highlighter: coderay
